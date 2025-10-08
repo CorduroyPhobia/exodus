@@ -1,38 +1,27 @@
 #include "AITuner.h"
+
 #include <algorithm>
 #include <cmath>
-#include <iostream>
-#include <numeric>
-#include <random>
+#include <limits>
 
-AITuner::AITuner() 
-    : currentMode(AimMode::AIM_ASSIST)
-    , learningRate(0.01f)
-    , explorationRate(0.1f)
-    , maxIterations(1000)
-    , targetRadius(10.0f)
-    , autoCalibrate(true)
-    , rng(std::random_device{}())
-    , floatDist(0.0f, 1.0f)
-    , intDist(400, 16000)
-    , shouldStop(false)
-    , totalReward(0.0)
-    , successfulTargets(0)
-    , totalTargets(0)
-{
-    try {
-        // Set default bounds
-        minSettings = MouseSettings(400, 0.1f, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
-        maxSettings = MouseSettings(16000, 5.0f, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
-        
-        // Initialize with mode-specific settings
-        applyModeSettings(currentMode);
-        
-        std::cout << "[AITuner] Constructor completed successfully" << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "[AITuner] Constructor error: " << e.what() << std::endl;
-        throw;
-    }
+namespace {
+constexpr std::size_t kMaxHistory = 256;
+constexpr std::size_t kMaxFeedbackQueue = 512;
+}
+
+AITuner::AITuner()
+    : stopRequested(false),
+      rng(std::random_device{}()) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+
+    shared.minSettings = MouseSettings(400, 0.1f, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f,
+                                       1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f,
+                                       false, 0.0f);
+    shared.maxSettings = MouseSettings(16000, 5.0f, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f,
+                                       10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f,
+                                       true, 2.0f);
+
+    applyModeSettingsInternal(shared.currentMode, shared);
 }
 
 AITuner::~AITuner() {
@@ -41,106 +30,158 @@ AITuner::~AITuner() {
 
 void AITuner::setAimMode(AimMode mode) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    currentMode = mode;
-    applyModeSettingsLocked(mode);
+    shared.currentMode = mode;
+    applyModeSettingsInternal(mode, shared);
 }
 
 void AITuner::setLearningRate(float rate) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    learningRate = std::clamp(rate, 0.001f, 0.1f);
+    shared.learningRate = std::clamp(rate, 0.001f, 0.5f);
 }
 
 void AITuner::setExplorationRate(float rate) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    explorationRate = std::clamp(rate, 0.01f, 0.5f);
+    shared.explorationRate = std::clamp(rate, 0.01f, 1.0f);
 }
 
 void AITuner::setMaxIterations(int iterations) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    maxIterations = std::max(100, iterations);
+    shared.maxIterations = std::max(1, iterations);
 }
 
 void AITuner::setTargetRadius(float radius) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    targetRadius = std::clamp(radius, 1.0f, 50.0f);
+    shared.targetRadius = std::clamp(radius, 1.0f, 50.0f);
 }
 
 void AITuner::setAutoCalibrate(bool enabled) {
     bool shouldStartCalibration = false;
-    bool shouldStopCalibration = false;
-
     {
         std::lock_guard<std::mutex> lock(stateMutex);
-        autoCalibrate = enabled;
-
-        if (autoCalibrate && !state.isCalibrating) {
-            shouldStartCalibration = true;
-        }
-
-        if (!autoCalibrate && state.isCalibrating) {
-            shouldStopCalibration = true;
+        shared.autoCalibrate = enabled;
+        shouldStartCalibration = enabled && shared.trainingActive && !shared.calibrating;
+        if (!enabled && shared.calibrating) {
+            shared.calibrating = false;
+            shared.calibrationStep = 0;
         }
     }
 
     if (shouldStartCalibration) {
         startCalibration();
     }
-
-    if (shouldStopCalibration) {
-        stopCalibration();
-    }
 }
 
 void AITuner::setSettingsBounds(const MouseSettings& min, const MouseSettings& max) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    minSettings = min;
-    maxSettings = max;
+    shared.minSettings = min;
+    shared.maxSettings = max;
+    shared.currentSettings = clampSettings(shared.currentSettings, shared.minSettings, shared.maxSettings);
+    shared.bestSettings = clampSettings(shared.bestSettings, shared.minSettings, shared.maxSettings);
 }
 
 void AITuner::startTraining() {
-    try {
-        if (trainingThread.joinable()) {
-            std::cout << "[AITuner] Training already active" << std::endl;
-            return; // Already training
+    bool joinPrevious = false;
+    bool launchThread = false;
+    bool startCalibrationNow = false;
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!shared.threadRunning && trainingThread.joinable()) {
+            joinPrevious = true;
         }
+    }
 
-        shouldStop = false;
-        trainingThread = std::thread(&AITuner::trainingLoop, this);
-        std::cout << "[AITuner] Training started successfully" << std::endl;
+    if (joinPrevious) {
+        trainingThread.join();
+    }
 
-        bool needsCalibration = false;
-        {
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!shared.threadRunning) {
+            shared.trainingActive = true;
+            shared.paused = false;
+            shared.threadRunning = true;
+            stopRequested.store(false);
+            launchThread = true;
+        } else {
+            shared.trainingActive = true;
+            shared.paused = false;
+        }
+        startCalibrationNow = shared.autoCalibrate && !shared.calibrating;
+    }
+
+    if (launchThread) {
+        try {
+            trainingThread = std::thread(&AITuner::trainingLoop, this);
+        } catch (...) {
             std::lock_guard<std::mutex> lock(stateMutex);
-            needsCalibration = autoCalibrate && !state.isCalibrating;
+            shared.threadRunning = false;
+            shared.trainingActive = false;
+            throw;
         }
+    }
 
-        if (needsCalibration) {
-            startCalibration();
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "[AITuner] Error starting training: " << e.what() << std::endl;
+    workAvailable.notify_all();
+
+    if (startCalibrationNow) {
+        startCalibration();
     }
 }
 
 void AITuner::stopTraining() {
-    shouldStop = true;
-    cv.notify_all();
-    
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        shared.trainingActive = false;
+        shared.paused = false;
+        shared.calibrating = false;
+        shared.calibrationStep = 0;
+    }
+
+    stopRequested.store(true);
+    workAvailable.notify_all();
+
     if (trainingThread.joinable()) {
         trainingThread.join();
     }
+
+    stopRequested.store(false);
+
+    std::lock_guard<std::mutex> lock(stateMutex);
+    shared.threadRunning = false;
+    feedbackQueue.clear();
 }
 
 void AITuner::pauseTraining() {
-    shouldStop = true;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (shared.threadRunning) {
+        shared.paused = true;
+    }
 }
 
 void AITuner::resumeTraining() {
-    if (!trainingThread.joinable()) {
+    bool needStart = false;
+    bool startCalibrationNow = false;
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!shared.threadRunning) {
+            needStart = true;
+        } else {
+            shared.paused = false;
+            shared.trainingActive = true;
+            startCalibrationNow = shared.autoCalibrate && !shared.calibrating;
+        }
+    }
+
+    if (needStart) {
         startTraining();
-    } else {
-        shouldStop = false;
-        cv.notify_all();
+        return;
+    }
+
+    workAvailable.notify_all();
+
+    if (startCalibrationNow) {
+        startCalibration();
     }
 }
 
@@ -148,177 +189,290 @@ void AITuner::resetTraining() {
     stopTraining();
 
     std::lock_guard<std::mutex> lock(stateMutex);
-    state.iteration = 0;
-    state.currentReward = 0.0;
-    state.isCalibrating = false;
-    settingsHistory.clear();
-    rewardHistory.clear();
-    totalReward = 0.0;
-    successfulTargets = 0;
-    totalTargets = 0;
-    
-    applyModeSettingsLocked(currentMode);
+    shared.iteration = 0;
+    shared.totalReward = 0.0;
+    shared.totalTargets = 0;
+    shared.successfulTargets = 0;
+    shared.lastReward = 0.0;
+    shared.rewardHistory.clear();
+    shared.settingsHistory.clear();
+    shared.calibrating = false;
+    shared.calibrationStep = 0;
+    applyModeSettingsInternal(shared.currentMode, shared);
 }
 
 void AITuner::provideFeedback(const AimbotTarget& target, double mouseX, double mouseY) {
-    try {
-        double radiusSnapshot = 0.0;
-        {
-            std::lock_guard<std::mutex> lock(stateMutex);
-            radiusSnapshot = targetRadius;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (feedbackQueue.size() >= kMaxFeedbackQueue) {
+            feedbackQueue.pop_front();
         }
-
-        RewardSample rewardSample = calculateReward(target, mouseX, mouseY, radiusSnapshot);
-
-        std::lock_guard<std::mutex> lock(queueMutex);
-
-        // Prevent queue from growing too large
-        if (feedbackQueue.size() > 100) {
-            feedbackQueue.pop(); // Remove oldest feedback
-        }
-
-        feedbackQueue.push({target, rewardSample.reward, rewardSample.targetHit});
-        cv.notify_all();
-    } catch (const std::exception& e) {
-        std::cerr << "[AITuner] Error providing feedback: " << e.what() << std::endl;
+        feedbackQueue.push_back({target, mouseX, mouseY});
     }
+
+    workAvailable.notify_one();
 }
 
 void AITuner::startCalibration() {
     std::lock_guard<std::mutex> lock(stateMutex);
-    state.isCalibrating = true;
-    state.iteration = 0;
-    
-    // Start with very low sensitivity for calibration
-    state.currentSettings.sensitivity = minSettings.sensitivity;
-    state.currentSettings.dpi = minSettings.dpi;
+    shared.calibrating = true;
+    shared.calibrationStep = 0;
+
+    MouseSettings baseline = shared.minSettings;
+    MouseSettings modeDefaults = clampSettings(getModeSettings(shared.currentMode), shared.minSettings, shared.maxSettings);
+
+    baseline.wind_mouse_enabled = modeDefaults.wind_mouse_enabled;
+    baseline.easynorecoil = modeDefaults.easynorecoil;
+
+    shared.currentSettings = clampSettings(baseline, shared.minSettings, shared.maxSettings);
+    shared.settingsHistory.push_back(shared.currentSettings);
+    if (shared.settingsHistory.size() > kMaxHistory) {
+        shared.settingsHistory.erase(shared.settingsHistory.begin());
+    }
+    shared.rewardHistory.push_back(0.0);
+    if (shared.rewardHistory.size() > kMaxHistory) {
+        shared.rewardHistory.erase(shared.rewardHistory.begin());
+    }
 }
 
 void AITuner::stopCalibration() {
     std::lock_guard<std::mutex> lock(stateMutex);
-    state.isCalibrating = false;
+    shared.calibrating = false;
+    shared.calibrationStep = 0;
 }
 
 MouseSettings AITuner::getCurrentSettings() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    return state.currentSettings;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.currentSettings;
 }
 
 AimMode AITuner::getCurrentMode() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    return currentMode;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.currentMode;
 }
 
 double AITuner::getCurrentReward() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    return state.currentReward;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.lastReward;
 }
 
 int AITuner::getCurrentIteration() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    return state.iteration;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.iteration;
 }
 
 bool AITuner::isTraining() const {
-    return trainingThread.joinable() && !shouldStop;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.trainingActive && !shared.paused;
 }
 
 bool AITuner::isCalibrating() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    return state.isCalibrating;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.calibrating;
 }
 
 double AITuner::getSuccessRate() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    return totalTargets > 0 ? (double)successfulTargets / totalTargets : 0.0;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return shared.totalTargets > 0 ? static_cast<double>(shared.successfulTargets) / shared.totalTargets : 0.0;
 }
 
 MouseSettings AITuner::getBestSettings() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    
-    if (rewardHistory.empty()) {
-        return state.currentSettings;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (std::isfinite(shared.bestReward)) {
+        return shared.bestSettings;
     }
-    
-    auto bestIt = std::max_element(rewardHistory.begin(), rewardHistory.end());
-    size_t bestIndex = std::distance(rewardHistory.begin(), bestIt);
-    
-    if (bestIndex < settingsHistory.size()) {
-        return settingsHistory[bestIndex];
-    }
-    
-    return state.currentSettings;
+    return shared.currentSettings;
 }
 
 AITuner::TrainingStats AITuner::getTrainingStats() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
-    
+    std::lock_guard<std::mutex> lock(stateMutex);
     TrainingStats stats;
-    stats.currentIteration = state.iteration;
-    stats.isTraining = isTraining();
-    stats.isCalibrating = state.isCalibrating;
-    stats.totalIterations = maxIterations;
-    
-    if (!rewardHistory.empty()) {
-        stats.averageReward = std::accumulate(rewardHistory.begin(), rewardHistory.end(), 0.0) / rewardHistory.size();
-        stats.bestReward = *std::max_element(rewardHistory.begin(), rewardHistory.end());
-    } else {
-        stats.averageReward = 0.0;
-        stats.bestReward = 0.0;
+    stats.currentIteration = shared.iteration;
+    stats.totalIterations = shared.maxIterations;
+    stats.isTraining = shared.trainingActive && !shared.paused;
+    stats.isCalibrating = shared.calibrating;
+    stats.successRate = shared.totalTargets > 0
+        ? static_cast<double>(shared.successfulTargets) / shared.totalTargets
+        : 0.0;
+    if (!shared.rewardHistory.empty()) {
+        double sum = 0.0;
+        for (double value : shared.rewardHistory) {
+            sum += value;
+        }
+        stats.averageReward = sum / static_cast<double>(shared.rewardHistory.size());
     }
-    
-    stats.successRate = getSuccessRate();
-    
+    if (std::isfinite(shared.bestReward) && shared.bestReward > -std::numeric_limits<double>::infinity()) {
+        stats.bestReward = shared.bestReward;
+    }
     return stats;
 }
 
 MouseSettings AITuner::getModeSettings(AimMode mode) const {
-    MouseSettings settings;
-    
     switch (mode) {
         case AimMode::AIM_ASSIST:
-            // Subtle assistance - moderate settings
-            settings = MouseSettings(
-                800, 1.0f, 0.1f, 0.3f, 0.01f, 2.0f, 20.0f, 2.0f, 1.1f,
-                true, 15.0f, 8.0f, 8.0f, 6.0f, false, 0.1f
-            );
-            break;
-            
+            return MouseSettings(800, 1.0f, 0.1f, 0.3f, 0.01f, 2.0f, 20.0f, 2.0f, 1.1f,
+                                 true, 15.0f, 8.0f, 8.0f, 6.0f, false, 0.1f);
         case AimMode::AIM_BOT:
-            // Good lock-on - more aggressive settings
-            settings = MouseSettings(
-                1200, 1.5f, 0.2f, 0.8f, 0.02f, 1.5f, 15.0f, 2.5f, 1.2f,
-                true, 25.0f, 12.0f, 12.0f, 8.0f, true, 0.3f
-            );
-            break;
-            
+            return MouseSettings(1200, 1.5f, 0.2f, 0.8f, 0.02f, 1.5f, 15.0f, 2.5f, 1.2f,
+                                 true, 25.0f, 12.0f, 12.0f, 8.0f, true, 0.3f);
         case AimMode::RAGE_BAITER:
-            // Maximum performance - most aggressive settings
-            settings = MouseSettings(
-                1600, 2.0f, 0.5f, 1.5f, 0.03f, 1.0f, 10.0f, 3.0f, 1.5f,
-                true, 40.0f, 20.0f, 15.0f, 10.0f, true, 0.5f
-            );
-            break;
+        default:
+            return MouseSettings(1600, 2.0f, 0.5f, 1.5f, 0.03f, 1.0f, 10.0f, 3.0f, 1.5f,
+                                 true, 40.0f, 20.0f, 15.0f, 10.0f, true, 0.5f);
     }
-    
-    return settings;
-}
-
-void AITuner::applyModeSettingsLocked(AimMode mode) {
-    state.currentSettings = getModeSettings(mode);
-    settingsHistory.push_back(state.currentSettings);
-    rewardHistory.push_back(0.0);
 }
 
 void AITuner::applyModeSettings(AimMode mode) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    currentMode = mode;
-    applyModeSettingsLocked(mode);
+    shared.currentMode = mode;
+    applyModeSettingsInternal(mode, shared);
 }
 
-MouseSettings AITuner::generateRandomSettings(const MouseSettings& minBounds, const MouseSettings& maxBounds) {
-    MouseSettings settings;
+void AITuner::trainingLoop() {
+    while (true) {
+        FeedbackEvent event;
+        SharedState snapshot;
 
+        {
+            std::unique_lock<std::mutex> lock(stateMutex);
+            workAvailable.wait(lock, [this] {
+                return stopRequested.load() ||
+                       (!shared.paused && shared.trainingActive && !feedbackQueue.empty());
+            });
+
+            if (stopRequested.load()) {
+                break;
+            }
+
+            if (feedbackQueue.empty() || !shared.trainingActive || shared.paused) {
+                continue;
+            }
+
+            event = feedbackQueue.front();
+            feedbackQueue.pop_front();
+            snapshot = shared;
+        }
+
+        RewardSample sample = calculateReward(event.target, event.mouseX, event.mouseY, snapshot.targetRadius);
+
+        bool calibrationFinished = false;
+        MouseSettings nextSettings;
+        if (snapshot.calibrating) {
+            nextSettings = performCalibrationStep(snapshot, sample, calibrationFinished);
+        } else {
+            nextSettings = performTrainingStep(snapshot, sample);
+        }
+        nextSettings = clampSettings(nextSettings, snapshot.minSettings, snapshot.maxSettings);
+
+        {
+            std::lock_guard<std::mutex> lock(stateMutex);
+            if (!shared.trainingActive) {
+                if (calibrationFinished && shared.calibrating) {
+                    shared.calibrating = false;
+                    shared.calibrationStep = 0;
+                }
+                continue;
+            }
+
+            if (shared.calibrating && !snapshot.calibrating) {
+                // A new calibration began while we processed this sample; keep the
+                // baseline provided by the caller and wait for fresh feedback.
+                continue;
+            }
+
+            shared.currentSettings = nextSettings;
+            shared.lastReward = sample.reward;
+            shared.iteration++;
+            shared.lastUpdate = std::chrono::steady_clock::now();
+            shared.totalReward += sample.reward;
+            shared.totalTargets++;
+            if (sample.targetHit) {
+                shared.successfulTargets++;
+            }
+
+            if (shared.rewardHistory.size() >= kMaxHistory) {
+                shared.rewardHistory.erase(shared.rewardHistory.begin());
+            }
+            shared.rewardHistory.push_back(sample.reward);
+
+            if (shared.settingsHistory.size() >= kMaxHistory) {
+                shared.settingsHistory.erase(shared.settingsHistory.begin());
+            }
+            shared.settingsHistory.push_back(nextSettings);
+
+            if (!std::isfinite(shared.bestReward) || sample.reward > shared.bestReward) {
+                shared.bestReward = sample.reward;
+                shared.bestSettings = nextSettings;
+            }
+
+            if (snapshot.calibrating && shared.calibrating) {
+                shared.calibrationStep = snapshot.calibrationStep + 1;
+                if (calibrationFinished || shared.calibrationStep >= shared.calibrationMaxSteps) {
+                    shared.calibrating = false;
+                    shared.calibrationStep = 0;
+                }
+            }
+
+            if (shared.iteration >= shared.maxIterations) {
+                shared.trainingActive = false;
+            }
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(stateMutex);
+    shared.threadRunning = false;
+    shared.trainingActive = false;
+    shared.paused = false;
+    shared.calibrating = false;
+    shared.calibrationStep = 0;
+}
+
+void AITuner::applyModeSettingsInternal(AimMode mode, SharedState& state) {
+    MouseSettings defaults = clampSettings(getModeSettings(mode), state.minSettings, state.maxSettings);
+    state.currentSettings = defaults;
+    state.bestSettings = defaults;
+    state.bestReward = -std::numeric_limits<double>::infinity();
+    state.lastReward = 0.0;
+    state.iteration = 0;
+    state.calibrating = false;
+    state.calibrationStep = 0;
+    state.totalReward = 0.0;
+    state.totalTargets = 0;
+    state.successfulTargets = 0;
+    state.settingsHistory.clear();
+    state.rewardHistory.clear();
+    state.settingsHistory.push_back(defaults);
+    state.rewardHistory.push_back(0.0);
+    state.lastUpdate = std::chrono::steady_clock::now();
+}
+
+MouseSettings AITuner::clampSettings(const MouseSettings& settings,
+                                     const MouseSettings& minBounds,
+                                     const MouseSettings& maxBounds) const {
+    MouseSettings clamped = settings;
+    clamped.dpi = std::clamp(clamped.dpi, minBounds.dpi, maxBounds.dpi);
+    clamped.sensitivity = std::clamp(clamped.sensitivity, minBounds.sensitivity, maxBounds.sensitivity);
+    clamped.minSpeedMultiplier = std::clamp(clamped.minSpeedMultiplier, minBounds.minSpeedMultiplier, maxBounds.minSpeedMultiplier);
+    clamped.maxSpeedMultiplier = std::clamp(clamped.maxSpeedMultiplier, minBounds.maxSpeedMultiplier, maxBounds.maxSpeedMultiplier);
+    clamped.predictionInterval = std::clamp(clamped.predictionInterval, minBounds.predictionInterval, maxBounds.predictionInterval);
+    clamped.snapRadius = std::clamp(clamped.snapRadius, minBounds.snapRadius, maxBounds.snapRadius);
+    clamped.nearRadius = std::clamp(clamped.nearRadius, minBounds.nearRadius, maxBounds.nearRadius);
+    clamped.speedCurveExponent = std::clamp(clamped.speedCurveExponent, minBounds.speedCurveExponent, maxBounds.speedCurveExponent);
+    clamped.snapBoostFactor = std::clamp(clamped.snapBoostFactor, minBounds.snapBoostFactor, maxBounds.snapBoostFactor);
+    clamped.wind_G = std::clamp(clamped.wind_G, minBounds.wind_G, maxBounds.wind_G);
+    clamped.wind_W = std::clamp(clamped.wind_W, minBounds.wind_W, maxBounds.wind_W);
+    clamped.wind_M = std::clamp(clamped.wind_M, minBounds.wind_M, maxBounds.wind_M);
+    clamped.wind_D = std::clamp(clamped.wind_D, minBounds.wind_D, maxBounds.wind_D);
+    clamped.easynorecoilstrength = std::clamp(clamped.easynorecoilstrength,
+                                              minBounds.easynorecoilstrength,
+                                              maxBounds.easynorecoilstrength);
+    return clamped;
+}
+
+MouseSettings AITuner::generateRandomSettings(const MouseSettings& minBounds,
+                                              const MouseSettings& maxBounds) {
+    std::uniform_real_distribution<float> random01(0.0f, 1.0f);
+    MouseSettings settings;
     settings.dpi = std::uniform_int_distribution<int>(minBounds.dpi, maxBounds.dpi)(rng);
     settings.sensitivity = std::uniform_real_distribution<float>(minBounds.sensitivity, maxBounds.sensitivity)(rng);
     settings.minSpeedMultiplier = std::uniform_real_distribution<float>(minBounds.minSpeedMultiplier, maxBounds.minSpeedMultiplier)(rng);
@@ -328,230 +482,159 @@ MouseSettings AITuner::generateRandomSettings(const MouseSettings& minBounds, co
     settings.nearRadius = std::uniform_real_distribution<float>(minBounds.nearRadius, maxBounds.nearRadius)(rng);
     settings.speedCurveExponent = std::uniform_real_distribution<float>(minBounds.speedCurveExponent, maxBounds.speedCurveExponent)(rng);
     settings.snapBoostFactor = std::uniform_real_distribution<float>(minBounds.snapBoostFactor, maxBounds.snapBoostFactor)(rng);
-    settings.wind_mouse_enabled = floatDist(rng) < 0.5f;
+    settings.wind_mouse_enabled = random01(rng) < 0.5f;
     settings.wind_G = std::uniform_real_distribution<float>(minBounds.wind_G, maxBounds.wind_G)(rng);
     settings.wind_W = std::uniform_real_distribution<float>(minBounds.wind_W, maxBounds.wind_W)(rng);
     settings.wind_M = std::uniform_real_distribution<float>(minBounds.wind_M, maxBounds.wind_M)(rng);
     settings.wind_D = std::uniform_real_distribution<float>(minBounds.wind_D, maxBounds.wind_D)(rng);
-    settings.easynorecoil = floatDist(rng) < 0.5f;
+    settings.easynorecoil = random01(rng) < 0.5f;
     settings.easynorecoilstrength = std::uniform_real_distribution<float>(minBounds.easynorecoilstrength, maxBounds.easynorecoilstrength)(rng);
-
     return settings;
 }
 
 MouseSettings AITuner::mutateSettings(const MouseSettings& base,
-                                     const MouseSettings& minBounds,
-                                     const MouseSettings& maxBounds,
-                                     float explorationRateValue) {
+                                      const MouseSettings& minBounds,
+                                      const MouseSettings& maxBounds,
+                                      float intensity) {
+    std::uniform_real_distribution<float> randomNegPos(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> random01(0.0f, 1.0f);
     MouseSettings mutated = base;
+    float scale = std::clamp(intensity, 0.01f, 1.0f);
 
-    // Mutate each parameter with small random changes
-    if (floatDist(rng) < explorationRateValue) {
-        mutated.dpi = std::clamp(mutated.dpi + (intDist(rng) - 8000) / 100, minBounds.dpi, maxBounds.dpi);
-    }
-    if (floatDist(rng) < explorationRateValue) {
-        mutated.sensitivity += (floatDist(rng) - 0.5f) * 0.2f;
-        mutated.sensitivity = std::clamp(mutated.sensitivity, minBounds.sensitivity, maxBounds.sensitivity);
-    }
-    if (floatDist(rng) < explorationRateValue) {
-        mutated.minSpeedMultiplier += (floatDist(rng) - 0.5f) * 0.1f;
-        mutated.minSpeedMultiplier = std::clamp(mutated.minSpeedMultiplier, minBounds.minSpeedMultiplier, maxBounds.minSpeedMultiplier);
-    }
-    if (floatDist(rng) < explorationRateValue) {
-        mutated.maxSpeedMultiplier += (floatDist(rng) - 0.5f) * 0.1f;
-        mutated.maxSpeedMultiplier = std::clamp(mutated.maxSpeedMultiplier, minBounds.maxSpeedMultiplier, maxBounds.maxSpeedMultiplier);
-    }
+    auto mutateFloat = [&](float value, float minValue, float maxValue, float span) {
+        float delta = randomNegPos(rng) * span * scale;
+        return std::clamp(value + delta, minValue, maxValue);
+    };
 
-    // Continue with other parameters...
-    // (Similar mutation logic for remaining parameters)
-
+    mutated.dpi = std::clamp(base.dpi + static_cast<int>(randomNegPos(rng) * 400.0f * scale),
+                             minBounds.dpi, maxBounds.dpi);
+    mutated.sensitivity = mutateFloat(base.sensitivity, minBounds.sensitivity, maxBounds.sensitivity,
+                                      std::max(0.05f, base.sensitivity * 0.2f + 0.05f));
+    mutated.minSpeedMultiplier = mutateFloat(base.minSpeedMultiplier, minBounds.minSpeedMultiplier, maxBounds.minSpeedMultiplier,
+                                             std::max(0.02f, base.minSpeedMultiplier * 0.1f + 0.01f));
+    mutated.maxSpeedMultiplier = mutateFloat(base.maxSpeedMultiplier, minBounds.maxSpeedMultiplier, maxBounds.maxSpeedMultiplier,
+                                             std::max(0.02f, base.maxSpeedMultiplier * 0.1f + 0.01f));
+    mutated.predictionInterval = mutateFloat(base.predictionInterval, minBounds.predictionInterval, maxBounds.predictionInterval,
+                                             std::max(0.001f, base.predictionInterval * 0.2f + 0.001f));
+    mutated.snapRadius = mutateFloat(base.snapRadius, minBounds.snapRadius, maxBounds.snapRadius,
+                                     std::max(0.1f, base.snapRadius * 0.1f + 0.05f));
+    mutated.nearRadius = mutateFloat(base.nearRadius, minBounds.nearRadius, maxBounds.nearRadius,
+                                     std::max(0.5f, base.nearRadius * 0.1f + 0.2f));
+    mutated.speedCurveExponent = mutateFloat(base.speedCurveExponent, minBounds.speedCurveExponent, maxBounds.speedCurveExponent,
+                                             std::max(0.05f, base.speedCurveExponent * 0.2f + 0.05f));
+    mutated.snapBoostFactor = mutateFloat(base.snapBoostFactor, minBounds.snapBoostFactor, maxBounds.snapBoostFactor,
+                                          std::max(0.05f, base.snapBoostFactor * 0.2f + 0.05f));
+    if (random01(rng) < 0.1f * scale) {
+        mutated.wind_mouse_enabled = !base.wind_mouse_enabled;
+    }
+    mutated.wind_G = mutateFloat(base.wind_G, minBounds.wind_G, maxBounds.wind_G,
+                                 std::max(0.5f, base.wind_G * 0.1f + 0.2f));
+    mutated.wind_W = mutateFloat(base.wind_W, minBounds.wind_W, maxBounds.wind_W,
+                                 std::max(0.5f, base.wind_W * 0.1f + 0.2f));
+    mutated.wind_M = mutateFloat(base.wind_M, minBounds.wind_M, maxBounds.wind_M,
+                                 std::max(0.5f, base.wind_M * 0.1f + 0.2f));
+    mutated.wind_D = mutateFloat(base.wind_D, minBounds.wind_D, maxBounds.wind_D,
+                                 std::max(0.5f, base.wind_D * 0.1f + 0.2f));
+    if (random01(rng) < 0.05f * scale) {
+        mutated.easynorecoil = !base.easynorecoil;
+    }
+    mutated.easynorecoilstrength = mutateFloat(base.easynorecoilstrength,
+                                               minBounds.easynorecoilstrength,
+                                               maxBounds.easynorecoilstrength,
+                                               std::max(0.05f, base.easynorecoilstrength * 0.2f + 0.05f));
     return mutated;
 }
 
 AITuner::RewardSample AITuner::calculateReward(const AimbotTarget& target,
-                                              double mouseX,
-                                              double mouseY,
-                                              double radius) const {
-    // Calculate distance from mouse to target center
+                                               double mouseX,
+                                               double mouseY,
+                                               double radius) const {
     double targetCenterX = target.x + target.w / 2.0;
     double targetCenterY = target.y + target.h / 2.0;
 
-    double distance = std::sqrt(std::pow(mouseX - targetCenterX, 2) + std::pow(mouseY - targetCenterY, 2));
+    double dx = mouseX - targetCenterX;
+    double dy = mouseY - targetCenterY;
+    double distance = std::sqrt(dx * dx + dy * dy);
 
-    // Reward based on proximity to target
-    double reward = 0.0;
     bool targetHit = distance <= radius;
+    double reward = 0.0;
 
     if (targetHit) {
-        // High reward for being on target
-        reward = 1.0 - (distance / radius) * 0.5;
-    } else if (distance <= radius * 2) {
-        // Medium reward for being close
-        reward = 0.5 - (distance - radius) / (radius * 2) * 0.3;
+        reward = 1.0 - (distance / std::max(radius, 0.001));
+    } else if (distance <= radius * 2.0) {
+        reward = 0.5 - ((distance - radius) / std::max(radius * 2.0, 0.001)) * 0.3;
     } else {
-        // Low reward for being far
-        reward = 0.1 - std::min(distance / (radius * 10), 0.1);
+        reward = -std::min(distance / std::max(radius * 10.0, 0.001), 1.0);
     }
 
-    return {std::max(reward, -1.0), targetHit};
+    return {std::clamp(reward, -1.0, 1.0), targetHit};
 }
 
-MouseSettings AITuner::interpolateSettings(const MouseSettings& a, const MouseSettings& b, float t) {
+MouseSettings AITuner::interpolateSettings(const MouseSettings& a,
+                                           const MouseSettings& b,
+                                           float t) const {
+    float clampedT = std::clamp(t, 0.0f, 1.0f);
     MouseSettings result;
-    
-    result.dpi = (int)(a.dpi + (b.dpi - a.dpi) * t);
-    result.sensitivity = a.sensitivity + (b.sensitivity - a.sensitivity) * t;
-    result.minSpeedMultiplier = a.minSpeedMultiplier + (b.minSpeedMultiplier - a.minSpeedMultiplier) * t;
-    result.maxSpeedMultiplier = a.maxSpeedMultiplier + (b.maxSpeedMultiplier - a.maxSpeedMultiplier) * t;
-    result.predictionInterval = a.predictionInterval + (b.predictionInterval - a.predictionInterval) * t;
-    result.snapRadius = a.snapRadius + (b.snapRadius - a.snapRadius) * t;
-    result.nearRadius = a.nearRadius + (b.nearRadius - a.nearRadius) * t;
-    result.speedCurveExponent = a.speedCurveExponent + (b.speedCurveExponent - a.speedCurveExponent) * t;
-    result.snapBoostFactor = a.snapBoostFactor + (b.snapBoostFactor - a.snapBoostFactor) * t;
-    result.wind_mouse_enabled = t > 0.5f ? b.wind_mouse_enabled : a.wind_mouse_enabled;
-    result.wind_G = a.wind_G + (b.wind_G - a.wind_G) * t;
-    result.wind_W = a.wind_W + (b.wind_W - a.wind_W) * t;
-    result.wind_M = a.wind_M + (b.wind_M - a.wind_M) * t;
-    result.wind_D = a.wind_D + (b.wind_D - a.wind_D) * t;
-    result.easynorecoil = t > 0.5f ? b.easynorecoil : a.easynorecoil;
-    result.easynorecoilstrength = a.easynorecoilstrength + (b.easynorecoilstrength - a.easynorecoilstrength) * t;
-    
+    result.dpi = static_cast<int>(a.dpi + (b.dpi - a.dpi) * clampedT);
+    result.sensitivity = a.sensitivity + (b.sensitivity - a.sensitivity) * clampedT;
+    result.minSpeedMultiplier = a.minSpeedMultiplier + (b.minSpeedMultiplier - a.minSpeedMultiplier) * clampedT;
+    result.maxSpeedMultiplier = a.maxSpeedMultiplier + (b.maxSpeedMultiplier - a.maxSpeedMultiplier) * clampedT;
+    result.predictionInterval = a.predictionInterval + (b.predictionInterval - a.predictionInterval) * clampedT;
+    result.snapRadius = a.snapRadius + (b.snapRadius - a.snapRadius) * clampedT;
+    result.nearRadius = a.nearRadius + (b.nearRadius - a.nearRadius) * clampedT;
+    result.speedCurveExponent = a.speedCurveExponent + (b.speedCurveExponent - a.speedCurveExponent) * clampedT;
+    result.snapBoostFactor = a.snapBoostFactor + (b.snapBoostFactor - a.snapBoostFactor) * clampedT;
+    result.wind_mouse_enabled = clampedT > 0.5f ? b.wind_mouse_enabled : a.wind_mouse_enabled;
+    result.wind_G = a.wind_G + (b.wind_G - a.wind_G) * clampedT;
+    result.wind_W = a.wind_W + (b.wind_W - a.wind_W) * clampedT;
+    result.wind_M = a.wind_M + (b.wind_M - a.wind_M) * clampedT;
+    result.wind_D = a.wind_D + (b.wind_D - a.wind_D) * clampedT;
+    result.easynorecoil = clampedT > 0.5f ? b.easynorecoil : a.easynorecoil;
+    result.easynorecoilstrength = a.easynorecoilstrength + (b.easynorecoilstrength - a.easynorecoilstrength) * clampedT;
     return result;
 }
 
-void AITuner::updateSettings(const MouseSettings& newSettings) {
-    std::lock_guard<std::mutex> lock(stateMutex);
-    state.currentSettings = newSettings;
-    state.lastUpdate = std::chrono::steady_clock::now();
+MouseSettings AITuner::performCalibrationStep(const SharedState& snapshot,
+                                              const RewardSample& sample,
+                                              bool& finished) {
+    MouseSettings target = clampSettings(getModeSettings(snapshot.currentMode),
+                                         snapshot.minSettings,
+                                         snapshot.maxSettings);
+    float progress = static_cast<float>(snapshot.calibrationStep + 1) /
+                     static_cast<float>(std::max(1, snapshot.calibrationMaxSteps));
+    float rewardFactor = static_cast<float>(std::clamp(sample.reward, 0.0, 1.0));
+    float blend = std::clamp(progress * 0.75f + rewardFactor * 0.5f, 0.0f, 1.0f);
+
+    if (sample.targetHit || sample.reward >= 0.85) {
+        finished = true;
+        blend = 1.0f;
+    } else if (snapshot.calibrationStep + 1 >= snapshot.calibrationMaxSteps) {
+        finished = true;
+    } else {
+        finished = false;
+    }
+
+    return interpolateSettings(snapshot.minSettings, target, blend);
 }
 
-void AITuner::trainingLoop() {
-    try {
-        while (true) {
-            if (shouldStop) {
-                break;
-            }
-
-            int iterationSnapshot = 0;
-            int maxIterationsSnapshot = 0;
-            {
-                std::lock_guard<std::mutex> stateLock(stateMutex);
-                iterationSnapshot = state.iteration;
-                maxIterationsSnapshot = maxIterations;
-            }
-
-            if (iterationSnapshot >= maxIterationsSnapshot) {
-                break;
-            }
-
-            std::unique_lock<std::mutex> lock(queueMutex);
-
-            // Wait for feedback or timeout
-            cv.wait_for(lock, std::chrono::milliseconds(100), [this] {
-                return !feedbackQueue.empty() || shouldStop;
-            });
-
-            if (shouldStop) {
-                break;
-            }
-
-            if (feedbackQueue.empty()) {
-                continue;
-            }
-
-            FeedbackSample feedback = feedbackQueue.front();
-            feedbackQueue.pop();
-            lock.unlock();
-
-            MouseSettings currentSettingsSnapshot;
-            bool isCalibratingSnapshot = false;
-            MouseSettings minSettingsSnapshot;
-            MouseSettings maxSettingsSnapshot;
-            float explorationRateSnapshot = 0.0f;
-            double currentRewardSnapshot = feedback.reward;
-            double successRateSnapshot = 0.0;
-
-            {
-                std::lock_guard<std::mutex> stateLock(stateMutex);
-                state.currentReward = feedback.reward;
-                rewardHistory.push_back(feedback.reward);
-                currentSettingsSnapshot = state.currentSettings;
-                isCalibratingSnapshot = state.isCalibrating;
-                minSettingsSnapshot = minSettings;
-                maxSettingsSnapshot = maxSettings;
-                explorationRateSnapshot = explorationRate;
-
-                totalTargets++;
-                if (feedback.targetHit) {
-                    successfulTargets++;
-                }
-                totalReward += feedback.reward;
-                successRateSnapshot = totalTargets > 0 ? static_cast<double>(successfulTargets) / totalTargets : 0.0;
-                currentRewardSnapshot = state.currentReward;
-            }
-
-            bool stopCalibrationAfterUpdate = false;
-            MouseSettings updatedSettings = currentSettingsSnapshot;
-            bool appliedNewSettings = false;
-
-            // Update settings based on reward
-            if (isCalibratingSnapshot) {
-                // During calibration, gradually increase sensitivity
-                if (feedback.reward < 0.3 && updatedSettings.sensitivity < maxSettingsSnapshot.sensitivity) {
-                    updatedSettings.sensitivity *= 1.1f;
-                    updatedSettings.sensitivity = std::min(updatedSettings.sensitivity, maxSettingsSnapshot.sensitivity);
-                    appliedNewSettings = true;
-                }
-                if (feedback.reward < 0.3 && updatedSettings.dpi < maxSettingsSnapshot.dpi) {
-                    updatedSettings.dpi = std::min(updatedSettings.dpi + 100, maxSettingsSnapshot.dpi);
-                    appliedNewSettings = true;
-                }
-
-                if (feedback.reward >= 0.8 ||
-                    feedback.targetHit ||
-                    updatedSettings.sensitivity >= maxSettingsSnapshot.sensitivity ||
-                    updatedSettings.dpi >= maxSettingsSnapshot.dpi) {
-                    stopCalibrationAfterUpdate = true;
-                }
-            } else {
-                // Normal training - explore and exploit
-                if (floatDist(rng) < explorationRateSnapshot) {
-                    // Explore: try random settings
-                    updatedSettings = generateRandomSettings(minSettingsSnapshot, maxSettingsSnapshot);
-                } else {
-                    // Exploit: improve current settings
-                    updatedSettings = mutateSettings(currentSettingsSnapshot,
-                                                     minSettingsSnapshot,
-                                                     maxSettingsSnapshot,
-                                                     explorationRateSnapshot);
-                }
-                appliedNewSettings = true;
-            }
-
-            if (appliedNewSettings) {
-                updateSettings(updatedSettings);
-                currentSettingsSnapshot = updatedSettings;
-            }
-
-            int updatedIterationSnapshot = 0;
-            {
-                std::lock_guard<std::mutex> stateLock(stateMutex);
-                settingsHistory.push_back(currentSettingsSnapshot);
-                state.iteration++;
-                updatedIterationSnapshot = state.iteration;
-            }
-
-            if (stopCalibrationAfterUpdate) {
-                stopCalibration();
-            }
-
-            if (updatedIterationSnapshot % 100 == 0) {
-                std::cout << "[AITuner] Iteration " << updatedIterationSnapshot
-                          << ", Reward: " << currentRewardSnapshot
-                          << ", Success Rate: " << successRateSnapshot << std::endl;
-            }
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "[AITuner] Training loop error: " << e.what() << std::endl;
+MouseSettings AITuner::performTrainingStep(const SharedState& snapshot,
+                                           const RewardSample& sample) {
+    std::uniform_real_distribution<float> random01(0.0f, 1.0f);
+    float exploreRoll = random01(rng);
+    if (exploreRoll < snapshot.explorationRate) {
+        return generateRandomSettings(snapshot.minSettings, snapshot.maxSettings);
     }
+
+    MouseSettings candidate = mutateSettings(snapshot.currentSettings,
+                                             snapshot.minSettings,
+                                             snapshot.maxSettings,
+                                             snapshot.learningRate);
+
+    if (std::isfinite(snapshot.bestReward) && snapshot.bestReward > -std::numeric_limits<double>::infinity()) {
+        float improvement = static_cast<float>(std::clamp(sample.reward, 0.0, 1.0));
+        float blend = std::clamp(snapshot.learningRate * 0.5f + improvement * 0.25f, 0.0f, 1.0f);
+        candidate = interpolateSettings(candidate, snapshot.bestSettings, blend);
+    }
+
+    return candidate;
 }

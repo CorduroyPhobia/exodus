@@ -1,131 +1,143 @@
 #ifndef AI_TUNER_H
 #define AI_TUNER_H
 
-#include <vector>
-#include <random>
-#include <chrono>
-#include <memory>
-#include <mutex>
 #include <atomic>
-#include <thread>
-#include <queue>
+#include <chrono>
 #include <condition_variable>
+#include <deque>
+#include <limits>
+#include <mutex>
+#include <random>
+#include <thread>
+#include <vector>
+
 #include "AimbotTarget.h"
 
 struct MouseSettings {
-    int dpi;
-    float sensitivity;
-    float minSpeedMultiplier;
-    float maxSpeedMultiplier;
-    float predictionInterval;
-    float snapRadius;
-    float nearRadius;
-    float speedCurveExponent;
-    float snapBoostFactor;
-    bool wind_mouse_enabled;
-    float wind_G;
-    float wind_W;
-    float wind_M;
-    float wind_D;
-    bool easynorecoil;
-    float easynorecoilstrength;
-    
+    int dpi = 0;
+    float sensitivity = 0.0f;
+    float minSpeedMultiplier = 0.0f;
+    float maxSpeedMultiplier = 0.0f;
+    float predictionInterval = 0.0f;
+    float snapRadius = 0.0f;
+    float nearRadius = 0.0f;
+    float speedCurveExponent = 0.0f;
+    float snapBoostFactor = 0.0f;
+    bool wind_mouse_enabled = false;
+    float wind_G = 0.0f;
+    float wind_W = 0.0f;
+    float wind_M = 0.0f;
+    float wind_D = 0.0f;
+    bool easynorecoil = false;
+    float easynorecoilstrength = 0.0f;
+
     MouseSettings() = default;
-    
-    MouseSettings(int dpi, float sensitivity, float minSpeed, float maxSpeed,
+
+    MouseSettings(int dpiValue, float sensitivityValue, float minSpeed, float maxSpeed,
                   float prediction, float snapR, float nearR, float speedCurve,
                   float snapBoost, bool windEnabled, float windG, float windW,
                   float windM, float windD, bool easyRecoil, float recoilStrength)
-        : dpi(dpi), sensitivity(sensitivity), minSpeedMultiplier(minSpeed),
-          maxSpeedMultiplier(maxSpeed), predictionInterval(prediction),
-          snapRadius(snapR), nearRadius(nearR), speedCurveExponent(speedCurve),
-          snapBoostFactor(snapBoost), wind_mouse_enabled(windEnabled),
-          wind_G(windG), wind_W(windW), wind_M(windM), wind_D(windD),
-          easynorecoil(easyRecoil), easynorecoilstrength(recoilStrength) {}
-};
-
-struct TrainingState {
-    MouseSettings currentSettings;
-    double currentReward;
-    int iteration;
-    bool isCalibrating;
-    std::chrono::steady_clock::time_point lastUpdate;
-    
-    TrainingState() : currentReward(0.0), iteration(0), isCalibrating(false) {
-        lastUpdate = std::chrono::steady_clock::now();
-    }
+        : dpi(dpiValue),
+          sensitivity(sensitivityValue),
+          minSpeedMultiplier(minSpeed),
+          maxSpeedMultiplier(maxSpeed),
+          predictionInterval(prediction),
+          snapRadius(snapR),
+          nearRadius(nearR),
+          speedCurveExponent(speedCurve),
+          snapBoostFactor(snapBoost),
+          wind_mouse_enabled(windEnabled),
+          wind_G(windG),
+          wind_W(windW),
+          wind_M(windM),
+          wind_D(windD),
+          easynorecoil(easyRecoil),
+          easynorecoilstrength(recoilStrength) {}
 };
 
 enum class AimMode {
-    AIM_ASSIST,    // Subtle assistance
-    AIM_BOT,       // Good lock-on
-    RAGE_BAITER    // Maximum performance
+    AIM_ASSIST,
+    AIM_BOT,
+    RAGE_BAITER
 };
 
 class AITuner {
 private:
-    // Configuration
-    AimMode currentMode;
-    float learningRate;
-    float explorationRate;
-    int maxIterations;
-    float targetRadius;
-    bool autoCalibrate;
-    MouseSettings minSettings;
-    MouseSettings maxSettings;
-    
-    // Training state
-    TrainingState state;
-    std::vector<MouseSettings> settingsHistory;
-    std::vector<double> rewardHistory;
-    
-    // Random number generation
-    std::mt19937 rng;
-    std::uniform_real_distribution<float> floatDist;
-    std::uniform_int_distribution<int> intDist;
-    
-    // Threading
-    std::thread trainingThread;
-    std::atomic<bool> shouldStop;
-    std::mutex stateMutex;
-    std::condition_variable cv;
-
-    struct FeedbackSample {
+    struct FeedbackEvent {
         AimbotTarget target;
-        double reward;
-        bool targetHit;
+        double mouseX = 0.0;
+        double mouseY = 0.0;
     };
-
-    std::queue<FeedbackSample> feedbackQueue;
-    std::mutex queueMutex;
-    
-    // Performance tracking
-    std::chrono::steady_clock::time_point lastTargetTime;
-    double totalReward;
-    int successfulTargets;
-    int totalTargets;
 
     struct RewardSample {
-        double reward;
-        bool targetHit;
+        double reward = 0.0;
+        bool targetHit = false;
     };
 
+    struct SharedState {
+        AimMode currentMode = AimMode::AIM_ASSIST;
+        float learningRate = 0.01f;
+        float explorationRate = 0.1f;
+        int maxIterations = 1000;
+        float targetRadius = 10.0f;
+        bool autoCalibrate = true;
+
+        MouseSettings minSettings;
+        MouseSettings maxSettings;
+        MouseSettings currentSettings;
+        MouseSettings bestSettings;
+
+        double bestReward = -std::numeric_limits<double>::infinity();
+        double lastReward = 0.0;
+        int iteration = 0;
+        bool calibrating = false;
+        int calibrationStep = 0;
+        int calibrationMaxSteps = 150;
+        bool trainingActive = false;
+        bool paused = false;
+        bool threadRunning = false;
+        std::chrono::steady_clock::time_point lastUpdate = std::chrono::steady_clock::now();
+        double totalReward = 0.0;
+        int successfulTargets = 0;
+        int totalTargets = 0;
+        std::vector<MouseSettings> settingsHistory;
+        std::vector<double> rewardHistory;
+    };
+
+    mutable std::mutex stateMutex;
+    std::condition_variable workAvailable;
+    SharedState shared;
+    std::deque<FeedbackEvent> feedbackQueue;
+
+    std::thread trainingThread;
+    std::atomic<bool> stopRequested;
+
+    std::mt19937 rng;
+
     // Helper methods
-    MouseSettings generateRandomSettings(const MouseSettings& minBounds, const MouseSettings& maxBounds);
+    void trainingLoop();
+    void applyModeSettingsInternal(AimMode mode, SharedState& state);
+    MouseSettings clampSettings(const MouseSettings& settings,
+                                const MouseSettings& minBounds,
+                                const MouseSettings& maxBounds) const;
+    MouseSettings generateRandomSettings(const MouseSettings& minBounds,
+                                         const MouseSettings& maxBounds);
     MouseSettings mutateSettings(const MouseSettings& base,
                                  const MouseSettings& minBounds,
                                  const MouseSettings& maxBounds,
-                                 float explorationRateValue);
+                                 float intensity);
     RewardSample calculateReward(const AimbotTarget& target, double mouseX, double mouseY, double radius) const;
-    MouseSettings interpolateSettings(const MouseSettings& a, const MouseSettings& b, float t);
-    void updateSettings(const MouseSettings& newSettings);
-    void applyModeSettingsLocked(AimMode mode);
-    void trainingLoop();
-    
+    MouseSettings interpolateSettings(const MouseSettings& a, const MouseSettings& b, float t) const;
+    MouseSettings performCalibrationStep(const SharedState& snapshot,
+                                         const RewardSample& sample,
+                                         bool& finished);
+    MouseSettings performTrainingStep(const SharedState& snapshot,
+                                      const RewardSample& sample);
+
 public:
     AITuner();
     ~AITuner();
-    
+
     // Configuration
     void setAimMode(AimMode mode);
     void setLearningRate(float rate);
@@ -134,19 +146,19 @@ public:
     void setTargetRadius(float radius);
     void setAutoCalibrate(bool enabled);
     void setSettingsBounds(const MouseSettings& min, const MouseSettings& max);
-    
+
     // Training control
     void startTraining();
     void stopTraining();
     void pauseTraining();
     void resumeTraining();
     void resetTraining();
-    
+
     // Feedback
     void provideFeedback(const AimbotTarget& target, double mouseX, double mouseY);
     void startCalibration();
     void stopCalibration();
-    
+
     // Getters
     MouseSettings getCurrentSettings() const;
     AimMode getCurrentMode() const;
@@ -156,20 +168,19 @@ public:
     bool isCalibrating() const;
     double getSuccessRate() const;
     MouseSettings getBestSettings() const;
-    
-    // Statistics
+
     struct TrainingStats {
-        double averageReward;
-        double bestReward;
-        double successRate;
-        int totalIterations;
-        int currentIteration;
-        bool isTraining;
-        bool isCalibrating;
+        double averageReward = 0.0;
+        double bestReward = 0.0;
+        double successRate = 0.0;
+        int totalIterations = 0;
+        int currentIteration = 0;
+        bool isTraining = false;
+        bool isCalibrating = false;
     };
-    
+
     TrainingStats getTrainingStats() const;
-    
+
     // Mode-specific settings
     MouseSettings getModeSettings(AimMode mode) const;
     void applyModeSettings(AimMode mode);
