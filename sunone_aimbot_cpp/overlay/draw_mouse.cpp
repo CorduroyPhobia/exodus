@@ -32,6 +32,9 @@ float prev_wind_D = config.wind_D;
 
 bool prev_auto_shoot = config.auto_shoot;
 float prev_bScope_multiplier = config.bScope_multiplier;
+float prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
+float prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
+float prev_auto_shoot_full_auto_grace_ms = config.auto_shoot_full_auto_grace_ms;
 
 static void draw_target_correction_demo()
 {
@@ -167,7 +170,10 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms
         );
         input_method_changed.store(true);
     }
@@ -278,6 +284,10 @@ void draw_mouse()
     if (config.auto_shoot)
     {
         ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.5f, 2.0f, "%.1f");
+        ImGui::SliderFloat("Shot Delay (ms)", &config.auto_shoot_fire_delay_ms, 0.0f, 500.0f, "%.0f");
+        ImGui::SliderFloat("Shot Hold (ms)", &config.auto_shoot_press_duration_ms, 0.0f, 200.0f, "%.0f");
+        ImGui::SliderFloat("Full Auto Grace (ms)", &config.auto_shoot_full_auto_grace_ms, 0.0f, 400.0f, "%.0f");
+        ImGui::TextDisabled("Set Hold to 0 to keep the trigger down while a target stays in scope.");
     }
 
     ImGui::SeparatorText("Wind mouse");
@@ -613,7 +623,10 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
 
         config.saveConfig();
     }
@@ -638,16 +651,25 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
 
         config.saveConfig();
     }
 
     if (prev_auto_shoot != config.auto_shoot ||
-        prev_bScope_multiplier != config.bScope_multiplier)
+        prev_bScope_multiplier != config.bScope_multiplier ||
+        prev_auto_shoot_fire_delay_ms != config.auto_shoot_fire_delay_ms ||
+        prev_auto_shoot_press_duration_ms != config.auto_shoot_press_duration_ms ||
+        prev_auto_shoot_full_auto_grace_ms != config.auto_shoot_full_auto_grace_ms)
     {
         prev_auto_shoot = config.auto_shoot;
         prev_bScope_multiplier = config.bScope_multiplier;
+        prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
+        prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
+        prev_auto_shoot_full_auto_grace_ms = config.auto_shoot_full_auto_grace_ms;
 
         globalMouseThread->updateConfig(
             config.detection_resolution,
@@ -657,7 +679,10 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
 
         config.saveConfig();
     }

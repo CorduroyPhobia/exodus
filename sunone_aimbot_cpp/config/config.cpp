@@ -110,6 +110,9 @@ bool Config::loadConfig(const std::string& filename)
         // Mouse shooting
         auto_shoot = false;
         bScope_multiplier = 1.0f;
+        auto_shoot_fire_delay_ms = 120.0f;
+        auto_shoot_press_duration_ms = 60.0f;
+        auto_shoot_full_auto_grace_ms = 120.0f;
 
         // AI
 #ifdef USE_CUDA
@@ -327,6 +330,12 @@ bool Config::loadConfig(const std::string& filename)
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
     bScope_multiplier = (float)get_double("bScope_multiplier", 1.2);
+    auto_shoot_fire_delay_ms = (float)get_double("auto_shoot_fire_delay_ms", 120.0);
+    if (auto_shoot_fire_delay_ms < 0.0f) auto_shoot_fire_delay_ms = 0.0f;
+    auto_shoot_press_duration_ms = (float)get_double("auto_shoot_press_duration_ms", 60.0);
+    if (auto_shoot_press_duration_ms < 0.0f) auto_shoot_press_duration_ms = 0.0f;
+    auto_shoot_full_auto_grace_ms = (float)get_double("auto_shoot_full_auto_grace_ms", 120.0);
+    if (auto_shoot_full_auto_grace_ms < 0.0f) auto_shoot_full_auto_grace_ms = 0.0f;
 
     // AI
 #ifdef USE_CUDA
@@ -491,7 +500,10 @@ bool Config::saveConfig(const std::string& filename)
     file << "# Mouse shooting\n"
         << "auto_shoot = " << (auto_shoot ? "true" : "false") << "\n"
         << std::fixed << std::setprecision(1)
-        << "bScope_multiplier = " << bScope_multiplier << "\n\n";
+        << "bScope_multiplier = " << bScope_multiplier << "\n"
+        << "auto_shoot_fire_delay_ms = " << auto_shoot_fire_delay_ms << "\n"
+        << "auto_shoot_press_duration_ms = " << auto_shoot_press_duration_ms << "\n"
+        << "auto_shoot_full_auto_grace_ms = " << auto_shoot_full_auto_grace_ms << "\n\n";
 
     // AI
     file << "# AI\n"

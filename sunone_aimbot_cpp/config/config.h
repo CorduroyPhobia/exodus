@@ -73,6 +73,9 @@ public:
     // Mouse shooting
     bool auto_shoot;
     float bScope_multiplier;
+    float auto_shoot_fire_delay_ms;
+    float auto_shoot_press_duration_ms;
+    float auto_shoot_full_auto_grace_ms;
 
     // AI
     std::string backend;

@@ -205,7 +205,10 @@ void mouseThreadFunction(MouseThread& mouseThread)
                     config.maxSpeedMultiplier,
                     config.predictionInterval,
                     config.auto_shoot,
-                    config.bScope_multiplier
+                    config.bScope_multiplier,
+                    config.auto_shoot_fire_delay_ms,
+                    config.auto_shoot_press_duration_ms,
+                    config.auto_shoot_full_auto_grace_ms
                 );
             }
             detection_resolution_changed.store(false);
@@ -363,6 +366,9 @@ int main()
             config.predictionInterval,
             config.auto_shoot,
             config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms,
             arduinoSerial,
             gHub,
             kmboxSerial,
