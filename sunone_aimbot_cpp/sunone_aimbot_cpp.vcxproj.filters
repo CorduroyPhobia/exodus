@@ -6,6 +6,7 @@
     <ClCompile Include="overlay\overlay.cpp" />
     <ClCompile Include="mouse\ghub.cpp" />
     <ClCompile Include="mouse\mouse.cpp" />
+    <ClCompile Include="mouse\mouse_ai_tuner.cpp" />
     <ClCompile Include="mouse\SerialConnection.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
     <ClCompile Include="detector\trt_detector.cpp" />
@@ -54,6 +55,7 @@
     <ClInclude Include="overlay\overlay.h" />
     <ClInclude Include="mouse\ghub.h" />
     <ClInclude Include="mouse\mouse.h" />
+    <ClInclude Include="mouse\mouse_ai_tuner.h" />
     <ClInclude Include="mouse\SerialConnection.h" />
     <ClInclude Include="mouse\AimbotTarget.h" />
     <ClInclude Include="detector\trt_detector.h" />

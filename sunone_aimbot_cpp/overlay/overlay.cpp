@@ -36,7 +36,7 @@ ID3D11RenderTargetView* g_mainRenderTargetView = NULL;
 HWND g_hwnd = NULL;
 
 extern Config config;
-extern std::mutex configMutex;
+extern std::recursive_mutex configMutex;
 extern std::atomic<bool> shouldExit;
 
 bool CreateDeviceD3D(HWND hWnd);
@@ -327,7 +327,7 @@ void OverlayThread()
 
             ImGui::Begin("Options", &show_overlay, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
             {
-                std::lock_guard<std::mutex> lock(configMutex);
+                std::lock_guard<std::recursive_mutex> lock(configMutex);
 
                 if (ImGui::BeginTabBar("Options tab bar"))
                 {

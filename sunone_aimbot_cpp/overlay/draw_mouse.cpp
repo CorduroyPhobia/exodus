@@ -4,6 +4,7 @@
 #include <Windows.h>
 
 #include <shellapi.h>
+#include <cfloat>
 
 #include "imgui/imgui.h"
 #include <imgui_internal.h>
@@ -11,6 +12,7 @@
 #include "sunone_aimbot_cpp.h"
 #include "include/other_tools.h"
 #include "kmbox_net/picture.h"
+#include "mouse/mouse_ai_tuner.h"
 
 std::string ghub_version = get_ghub_version();
 
@@ -32,6 +34,9 @@ float prev_wind_D = config.wind_D;
 
 bool prev_auto_shoot = config.auto_shoot;
 float prev_bScope_multiplier = config.bScope_multiplier;
+float prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
+float prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
+float prev_auto_shoot_full_auto_grace_ms = config.auto_shoot_full_auto_grace_ms;
 
 static void draw_target_correction_demo()
 {
@@ -102,6 +107,40 @@ void draw_mouse()
     ImGui::SliderInt("FOV X", &config.fovX, 10, 120);
     ImGui::SliderInt("FOV Y", &config.fovY, 10, 120);
 
+    ImGui::SeparatorText("Mouse AI Tuner");
+    static const char* aiModeLabels[] = {
+        "Manual",
+        "Aim Assist (AI)",
+        "Aim Bot (AI)",
+        "Rage Baiter (AI)"
+    };
+    int aiModeIndex = static_cast<int>(mouseAITuner.mode());
+    if (ImGui::Combo("Automation Mode", &aiModeIndex, aiModeLabels, IM_ARRAYSIZE(aiModeLabels)))
+    {
+        mouseAITuner.setMode(static_cast<MouseAITuner::Mode>(aiModeIndex));
+    }
+
+    auto aiStatus = mouseAITuner.status();
+    if (aiStatus.active)
+    {
+        ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "%s", aiStatus.description.c_str());
+        ImGui::ProgressBar(aiStatus.progress, ImVec2(-FLT_MIN, 0.0f), aiStatus.exploring ? "Exploration" : "Baseline");
+        ImGui::TextDisabled("Baseline: %.2f  Candidate: %.2f  Last reward: %.2f",
+            aiStatus.baselineScore,
+            aiStatus.candidateScore,
+            aiStatus.lastReward);
+        if (ImGui::Button("Reset AI Calibration"))
+        {
+            mouseAITuner.resetCurrentMode();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Keep aiming at targets to continue calibration.");
+    }
+    else
+    {
+        ImGui::TextDisabled("AI idle. Choose an AI mode to auto-calibrate your mouse settings.");
+    }
+
     ImGui::SeparatorText("Speed Multiplier");
     ImGui::SliderFloat("Min Speed Multiplier", &config.minSpeedMultiplier, 0.1f, 5.0f, "%.1f");
     ImGui::SliderFloat("Max Speed Multiplier", &config.maxSpeedMultiplier, 0.1f, 5.0f, "%.1f");
@@ -167,9 +206,13 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms
         );
         input_method_changed.store(true);
+        mouseAITuner.notifyProfileChanged();
     }
 
     const auto& gp = config.currentProfile();
@@ -238,6 +281,7 @@ void draw_mouse()
             config.active_game = name;
             config.saveConfig();
             input_method_changed.store(true);
+            mouseAITuner.notifyProfileChanged();
             new_profile_name[0] = '\0'; // clear
         }
     }
@@ -255,6 +299,7 @@ void draw_mouse()
 
             config.saveConfig();
             input_method_changed.store(true);
+            mouseAITuner.notifyProfileChanged();
         }
         ImGui::PopStyleColor();
     }
@@ -278,6 +323,10 @@ void draw_mouse()
     if (config.auto_shoot)
     {
         ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.5f, 2.0f, "%.1f");
+        ImGui::SliderFloat("Shot Delay (ms)", &config.auto_shoot_fire_delay_ms, 0.0f, 500.0f, "%.0f");
+        ImGui::SliderFloat("Shot Hold (ms)", &config.auto_shoot_press_duration_ms, 0.0f, 200.0f, "%.0f");
+        ImGui::SliderFloat("Full Auto Grace (ms)", &config.auto_shoot_full_auto_grace_ms, 0.0f, 400.0f, "%.0f");
+        ImGui::TextDisabled("Set Hold to 0 to keep the trigger down while a target stays in scope.");
     }
 
     ImGui::SeparatorText("Wind mouse");
@@ -613,7 +662,10 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
 
         config.saveConfig();
     }
@@ -638,16 +690,25 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
 
         config.saveConfig();
     }
 
     if (prev_auto_shoot != config.auto_shoot ||
-        prev_bScope_multiplier != config.bScope_multiplier)
+        prev_bScope_multiplier != config.bScope_multiplier ||
+        prev_auto_shoot_fire_delay_ms != config.auto_shoot_fire_delay_ms ||
+        prev_auto_shoot_press_duration_ms != config.auto_shoot_press_duration_ms ||
+        prev_auto_shoot_full_auto_grace_ms != config.auto_shoot_full_auto_grace_ms)
     {
         prev_auto_shoot = config.auto_shoot;
         prev_bScope_multiplier = config.bScope_multiplier;
+        prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
+        prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
+        prev_auto_shoot_full_auto_grace_ms = config.auto_shoot_full_auto_grace_ms;
 
         globalMouseThread->updateConfig(
             config.detection_resolution,
@@ -657,7 +718,10 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
 
         config.saveConfig();
     }

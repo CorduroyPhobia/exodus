@@ -17,12 +17,13 @@
 #include "ghub.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
+#include "mouse/mouse_ai_tuner.h"
 
 std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
 std::atomic<bool> aiming(false);
 std::atomic<bool> detectionPaused(false);
-std::mutex configMutex;
+std::recursive_mutex configMutex;
 
 #ifdef USE_CUDA
 TrtDetector trt_detector;
@@ -196,7 +197,7 @@ void mouseThreadFunction(MouseThread& mouseThread)
         if (detection_resolution_changed.load())
         {
             {
-                std::lock_guard<std::mutex> cfgLock(configMutex);
+                std::lock_guard<std::recursive_mutex> cfgLock(configMutex);
                 mouseThread.updateConfig(
                     config.detection_resolution,
                     config.fovX,
@@ -205,9 +206,13 @@ void mouseThreadFunction(MouseThread& mouseThread)
                     config.maxSpeedMultiplier,
                     config.predictionInterval,
                     config.auto_shoot,
-                    config.bScope_multiplier
+                    config.bScope_multiplier,
+                    config.auto_shoot_fire_delay_ms,
+                    config.auto_shoot_press_duration_ms,
+                    config.auto_shoot_full_auto_grace_ms
                 );
             }
+            mouseAITuner.notifyResolutionChanged(config.detection_resolution);
             detection_resolution_changed.store(false);
         }
 
@@ -267,6 +272,8 @@ void mouseThreadFunction(MouseThread& mouseThread)
         handleEasyNoRecoil(mouseThread);
 
         mouseThread.checkAndResetPredictions();
+
+        mouseAITuner.onSample(target);
 
         delete target;
     }
@@ -363,6 +370,9 @@ int main()
             config.predictionInterval,
             config.auto_shoot,
             config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms,
             arduinoSerial,
             gHub,
             kmboxSerial,
@@ -371,6 +381,7 @@ int main()
 
         globalMouseThread = &mouseThread;
         assignInputDevices();
+        mouseAITuner.initialize(&config, &mouseThread);
 
         std::vector<std::string> availableModels = getAvailableModels();
 

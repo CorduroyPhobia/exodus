@@ -25,6 +25,9 @@ MouseThread::MouseThread(
     double predictionInterval,
     bool auto_shoot,
     float bScope_multiplier,
+    double auto_shoot_fire_delay_ms,
+    double auto_shoot_press_duration_ms,
+    double auto_shoot_full_auto_grace_ms,
     SerialConnection* serialConnection,
     GhubMouse* gHubMouse,
     Kmbox_b_Connection* kmboxConnection,
@@ -41,6 +44,9 @@ MouseThread::MouseThread(
     center_y(resolution / 2.0),
     auto_shoot(auto_shoot),
     bScope_multiplier(bScope_multiplier),
+    auto_shoot_fire_delay_ms(std::max(0.0, auto_shoot_fire_delay_ms)),
+    auto_shoot_press_duration_ms(std::max(0.0, auto_shoot_press_duration_ms)),
+    auto_shoot_full_auto_grace_ms(std::max(0.0, auto_shoot_full_auto_grace_ms)),
     serial(serialConnection),
     kmbox(kmboxConnection),
     kmbox_net(Kmbox_Net_Connection),
@@ -52,7 +58,11 @@ MouseThread::MouseThread(
     prev_y(0.0)
 {
     prev_time = std::chrono::steady_clock::time_point();
-    last_target_time = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    last_target_time = now;
+    last_press_time = now;
+    last_release_time = now;
+    last_in_scope_time = now;
 
     wind_mouse_enabled = config.wind_mouse_enabled;
     wind_G = config.wind_G;
@@ -71,7 +81,10 @@ void MouseThread::updateConfig(
     double maxSpeedMultiplier,
     double predictionInterval,
     bool auto_shoot,
-    float bScope_multiplier
+    float bScope_multiplier,
+    double auto_shoot_fire_delay_ms,
+    double auto_shoot_press_duration_ms,
+    double auto_shoot_full_auto_grace_ms
 )
 {
     screen_width = screen_height = resolution;
@@ -81,6 +94,9 @@ void MouseThread::updateConfig(
     prediction_interval = predictionInterval;
     this->auto_shoot = auto_shoot;
     this->bScope_multiplier = bScope_multiplier;
+    this->auto_shoot_fire_delay_ms = std::max(0.0, auto_shoot_fire_delay_ms);
+    this->auto_shoot_press_duration_ms = std::max(0.0, auto_shoot_press_duration_ms);
+    this->auto_shoot_full_auto_grace_ms = std::max(0.0, auto_shoot_full_auto_grace_ms);
 
     center_x = center_y = resolution / 2.0;
     max_distance = std::hypot(resolution, resolution) / 2.0;
@@ -178,6 +194,60 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
             queueMove(step_x, step_y);
             cx = rx; cy = ry;
         }
+    }
+}
+
+void MouseThread::sendMousePress()
+{
+    if (kmbox)
+    {
+        kmbox->press(0);
+    }
+    else if (kmbox_net)
+    {
+        kmbox_net->keyDown(0);
+    }
+    else if (serial)
+    {
+        serial->press();
+    }
+    else if (gHub)
+    {
+        gHub->mouse_down();
+    }
+    else
+    {
+        INPUT input = { 0 };
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+        SendInput(1, &input, sizeof(INPUT));
+    }
+}
+
+void MouseThread::sendMouseRelease()
+{
+    if (kmbox)
+    {
+        kmbox->release(0);
+    }
+    else if (kmbox_net)
+    {
+        kmbox_net->keyUp(0);
+    }
+    else if (serial)
+    {
+        serial->release();
+    }
+    else if (gHub)
+    {
+        gHub->mouse_up();
+    }
+    else
+    {
+        INPUT input = { 0 };
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+        SendInput(1, &input, sizeof(INPUT));
     }
 }
 
@@ -387,60 +457,48 @@ void MouseThread::pressMouse(const AimbotTarget& target)
 {
     std::lock_guard<std::mutex> lock(input_method_mutex);
 
-    bool bScope = check_target_in_scope(target.x, target.y, target.w, target.h, bScope_multiplier);
-    if (bScope && !mouse_pressed)
+    bool inScope = check_target_in_scope(target.x, target.y, target.w, target.h, bScope_multiplier);
+    auto now = std::chrono::steady_clock::now();
+
+    if (inScope)
     {
-        if (kmbox)
+        last_in_scope_time = now;
+
+        if (!mouse_pressed)
         {
-            kmbox->press(0);
+            double sinceRelease = std::chrono::duration<double, std::milli>(now - last_release_time).count();
+            if (sinceRelease >= auto_shoot_fire_delay_ms)
+            {
+                sendMousePress();
+                mouse_pressed = true;
+                last_press_time = now;
+            }
         }
-        else if (kmbox_net)
+        else if (auto_shoot_press_duration_ms > 0.0)
         {
-            kmbox_net->keyDown(0);
+            double held = std::chrono::duration<double, std::milli>(now - last_press_time).count();
+            if (held >= auto_shoot_press_duration_ms)
+            {
+                sendMouseRelease();
+                mouse_pressed = false;
+                last_release_time = now;
+            }
         }
-        else if (serial)
-        {
-            serial->press();
-        }
-        else if (gHub)
-        {
-            gHub->mouse_down();
-        }
-        else
-        {
-            INPUT input = { 0 };
-            input.type = INPUT_MOUSE;
-            input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-            SendInput(1, &input, sizeof(INPUT));
-        }
-        mouse_pressed = true;
     }
-    else if (!bScope && mouse_pressed)
+    else if (mouse_pressed)
     {
-        if (kmbox)
+        double held = std::chrono::duration<double, std::milli>(now - last_press_time).count();
+        double sinceScope = std::chrono::duration<double, std::milli>(now - last_in_scope_time).count();
+
+        bool releaseDueToHold = auto_shoot_press_duration_ms > 0.0 && held >= auto_shoot_press_duration_ms;
+        bool releaseDueToGrace = sinceScope >= auto_shoot_full_auto_grace_ms;
+
+        if (releaseDueToHold || releaseDueToGrace)
         {
-            kmbox->release(0);
+            sendMouseRelease();
+            mouse_pressed = false;
+            last_release_time = now;
         }
-        else if (kmbox_net)
-        {
-            kmbox_net->keyUp(0);
-        }
-        else if (serial)
-        {
-            serial->release();
-        }
-        else if (gHub)
-        {
-            gHub->mouse_up();
-        }
-        else
-        {
-            INPUT input = { 0 };
-            input.type = INPUT_MOUSE;
-            input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-            SendInput(1, &input, sizeof(INPUT));
-        }
-        mouse_pressed = false;
     }
 }
 
@@ -450,30 +508,9 @@ void MouseThread::releaseMouse()
 
     if (mouse_pressed)
     {
-        if (kmbox)
-        {
-            kmbox->release(0);
-        }
-        else if (kmbox_net)
-        {
-            kmbox_net->keyUp(0);
-        }
-        else if (serial)
-        {
-            serial->release();
-        }
-        else if (gHub)
-        {
-            gHub->mouse_up();
-        }
-        else
-        {
-            INPUT input = { 0 };
-            input.type = INPUT_MOUSE;
-            input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-            SendInput(1, &input, sizeof(INPUT));
-        }
+        sendMouseRelease();
         mouse_pressed = false;
+        last_release_time = std::chrono::steady_clock::now();
     }
 }
 

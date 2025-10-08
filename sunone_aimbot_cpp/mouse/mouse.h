@@ -36,11 +36,17 @@ private:
     double center_y;
     bool   auto_shoot;
     float  bScope_multiplier;
+    double auto_shoot_fire_delay_ms;
+    double auto_shoot_press_duration_ms;
+    double auto_shoot_full_auto_grace_ms;
 
     double prev_x, prev_y;
     double prev_velocity_x, prev_velocity_y;
     std::chrono::time_point<std::chrono::steady_clock> prev_time;
     std::chrono::steady_clock::time_point last_target_time;
+    std::chrono::steady_clock::time_point last_press_time;
+    std::chrono::steady_clock::time_point last_release_time;
+    std::chrono::steady_clock::time_point last_in_scope_time;
     std::atomic<bool> target_detected{ false };
     std::atomic<bool> mouse_pressed{ false };
 
@@ -70,6 +76,9 @@ private:
     double wind_G, wind_W, wind_M, wind_D;
     void   windMouseMoveRelative(int dx, int dy);
 
+    void sendMousePress();
+    void sendMouseRelease();
+
     std::pair<double, double> calc_movement(double target_x, double target_y);
     double calculate_speed_multiplier(double distance);
 
@@ -85,6 +94,9 @@ public:
         double predictionInterval,
         bool auto_shoot,
         float bScope_multiplier,
+        double auto_shoot_fire_delay_ms,
+        double auto_shoot_press_duration_ms,
+        double auto_shoot_full_auto_grace_ms,
         SerialConnection* serialConnection = nullptr,
         GhubMouse* gHubMouse = nullptr,
         Kmbox_b_Connection* kmboxConnection = nullptr,
@@ -100,7 +112,10 @@ public:
         double maxSpeedMultiplier,
         double predictionInterval,
         bool auto_shoot,
-        float bScope_multiplier
+        float bScope_multiplier,
+        double auto_shoot_fire_delay_ms,
+        double auto_shoot_press_duration_ms,
+        double auto_shoot_full_auto_grace_ms
     );
 
     void moveMousePivot(double pivotX, double pivotY);
