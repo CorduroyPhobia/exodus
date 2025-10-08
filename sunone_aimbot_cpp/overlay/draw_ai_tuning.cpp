@@ -44,8 +44,41 @@ void draw_ai_tuning()
                     globalAITuner->setAimMode(mode);
                     
                     // Set settings bounds
-                    MouseSettings minSettings(config.ai_dpi_min, config.ai_sensitivity_min, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
-                    MouseSettings maxSettings(config.ai_dpi_max, config.ai_sensitivity_max, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
+                    MouseSettings minSettings{};
+                    minSettings.dpi = config.ai_dpi_min;
+                    minSettings.sensitivity = config.ai_sensitivity_min;
+                    minSettings.minSpeedMultiplier = 0.01f;
+                    minSettings.maxSpeedMultiplier = 0.01f;
+                    minSettings.predictionInterval = 0.001f;
+                    minSettings.snapRadius = 0.5f;
+                    minSettings.nearRadius = 5.0f;
+                    minSettings.speedCurveExponent = 1.0f;
+                    minSettings.snapBoostFactor = 1.0f;
+                    minSettings.wind_mouse_enabled = false;
+                    minSettings.wind_G = 10.0f;
+                    minSettings.wind_W = 5.0f;
+                    minSettings.wind_M = 5.0f;
+                    minSettings.wind_D = 3.0f;
+                    minSettings.easynorecoil = false;
+                    minSettings.easynorecoilstrength = 0.0f;
+
+                    MouseSettings maxSettings{};
+                    maxSettings.dpi = config.ai_dpi_max;
+                    maxSettings.sensitivity = config.ai_sensitivity_max;
+                    maxSettings.minSpeedMultiplier = 2.0f;
+                    maxSettings.maxSpeedMultiplier = 2.0f;
+                    maxSettings.predictionInterval = 0.1f;
+                    maxSettings.snapRadius = 5.0f;
+                    maxSettings.nearRadius = 100.0f;
+                    maxSettings.speedCurveExponent = 10.0f;
+                    maxSettings.snapBoostFactor = 3.0f;
+                    maxSettings.wind_mouse_enabled = true;
+                    maxSettings.wind_G = 50.0f;
+                    maxSettings.wind_W = 30.0f;
+                    maxSettings.wind_M = 20.0f;
+                    maxSettings.wind_D = 15.0f;
+                    maxSettings.easynorecoil = true;
+                    maxSettings.easynorecoilstrength = 2.0f;
                     globalAITuner->setSettingsBounds(minSettings, maxSettings);
                     
                     std::cout << "[AI Tuner] Created successfully" << std::endl;
