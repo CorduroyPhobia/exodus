@@ -41,6 +41,7 @@
     <ClCompile Include="mouse\Kmbox_b.cpp" />
     <ClCompile Include="mouse\kmbox_net\kmboxNet.cpp" />
     <ClCompile Include="mouse\mouse.cpp" />
+    <ClCompile Include="mouse\mouse_ai_tuner.cpp" />
     <ClCompile Include="mouse\SerialConnection.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
     <ClCompile Include="overlay\draw_ai.cpp" />
@@ -92,6 +93,7 @@
     <ClInclude Include="mouse\kmbox_net\kmboxNet.h" />
     <ClInclude Include="mouse\kmbox_net\picture.h" />
     <ClInclude Include="mouse\mouse.h" />
+    <ClInclude Include="mouse\mouse_ai_tuner.h" />
     <ClInclude Include="mouse\SerialConnection.h" />
     <ClInclude Include="mouse\AimbotTarget.h" />
     <ClInclude Include="overlay\draw_settings.h" />

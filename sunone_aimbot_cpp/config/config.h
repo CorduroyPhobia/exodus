@@ -77,6 +77,29 @@ public:
     float auto_shoot_press_duration_ms;
     float auto_shoot_full_auto_grace_ms;
 
+    struct MouseAIPreset
+    {
+        int   fovX;
+        int   fovY;
+        float minSpeedMultiplier;
+        float maxSpeedMultiplier;
+        float predictionInterval;
+        int   prediction_futurePositions;
+        bool  draw_futurePositions;
+        float snapRadius;
+        float nearRadius;
+        float speedCurveExponent;
+        float snapBoostFactor;
+        bool  auto_shoot;
+        float bScope_multiplier;
+        float auto_shoot_fire_delay_ms;
+        float auto_shoot_press_duration_ms;
+        float auto_shoot_full_auto_grace_ms;
+    };
+
+    std::unordered_map<std::string, MouseAIPreset> mouse_ai_presets;
+    std::string mouse_ai_mode;
+
     // AI
     std::string backend;
     int dml_device_id;
@@ -147,6 +170,8 @@ public:
 
     const GameProfile & currentProfile() const;
     std::pair<double, double> degToCounts(double degX, double degY, double fovNow) const;
+
+    MouseAIPreset captureMousePreset() const;
 
     bool loadConfig(const std::string& filename = "config.ini");
     bool saveConfig(const std::string& filename = "config.ini");

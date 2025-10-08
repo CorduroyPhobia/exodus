@@ -114,6 +114,12 @@ bool Config::loadConfig(const std::string& filename)
         auto_shoot_press_duration_ms = 60.0f;
         auto_shoot_full_auto_grace_ms = 120.0f;
 
+        mouse_ai_mode = "manual";
+        auto basePreset = captureMousePreset();
+        mouse_ai_presets["aim_assist"] = basePreset;
+        mouse_ai_presets["aim_bot"] = basePreset;
+        mouse_ai_presets["rage_baiter"] = basePreset;
+
         // AI
 #ifdef USE_CUDA
         backend = "TRT";
@@ -215,6 +221,7 @@ bool Config::loadConfig(const std::string& filename)
         };
 
     game_profiles.clear();
+    mouse_ai_presets.clear();
 
     CSimpleIniA::TNamesDepend keys;
     ini.GetAllKeys("Games", keys);
@@ -337,6 +344,49 @@ bool Config::loadConfig(const std::string& filename)
     auto_shoot_full_auto_grace_ms = (float)get_double("auto_shoot_full_auto_grace_ms", 120.0);
     if (auto_shoot_full_auto_grace_ms < 0.0f) auto_shoot_full_auto_grace_ms = 0.0f;
 
+    mouse_ai_mode = get_string("mouse_ai_mode", "manual");
+    auto parseMousePreset = [&](const char* key, const MouseAIPreset& fallback)
+    {
+        std::string val = get_string(key, "");
+        if (val.empty())
+            return fallback;
+
+        auto parts = splitString(val, ',');
+        MouseAIPreset preset = fallback;
+        try
+        {
+            if (parts.size() < 16)
+                throw std::runtime_error("not enough values");
+
+            preset.fovX = std::stoi(parts[0]);
+            preset.fovY = std::stoi(parts[1]);
+            preset.minSpeedMultiplier = std::stof(parts[2]);
+            preset.maxSpeedMultiplier = std::stof(parts[3]);
+            preset.predictionInterval = std::stof(parts[4]);
+            preset.prediction_futurePositions = std::stoi(parts[5]);
+            preset.draw_futurePositions = (parts[6] == "1" || parts[6] == "true");
+            preset.snapRadius = std::stof(parts[7]);
+            preset.nearRadius = std::stof(parts[8]);
+            preset.speedCurveExponent = std::stof(parts[9]);
+            preset.snapBoostFactor = std::stof(parts[10]);
+            preset.auto_shoot = (parts[11] == "1" || parts[11] == "true");
+            preset.bScope_multiplier = std::stof(parts[12]);
+            preset.auto_shoot_fire_delay_ms = std::stof(parts[13]);
+            preset.auto_shoot_press_duration_ms = std::stof(parts[14]);
+            preset.auto_shoot_full_auto_grace_ms = std::stof(parts[15]);
+        }
+        catch (const std::exception&)
+        {
+            preset = fallback;
+        }
+        return preset;
+    };
+
+    MouseAIPreset presetFallback = captureMousePreset();
+    mouse_ai_presets["aim_assist"] = parseMousePreset("mouse_ai_preset_aim_assist", presetFallback);
+    mouse_ai_presets["aim_bot"] = parseMousePreset("mouse_ai_preset_aim_bot", presetFallback);
+    mouse_ai_presets["rage_baiter"] = parseMousePreset("mouse_ai_preset_rage_baiter", presetFallback);
+
     // AI
 #ifdef USE_CUDA
     backend = get_string("backend", "TRT");
@@ -408,6 +458,28 @@ bool Config::loadConfig(const std::string& filename)
     verbose = get_bool("verbose", false);
 
     return true;
+}
+
+Config::MouseAIPreset Config::captureMousePreset() const
+{
+    MouseAIPreset preset{};
+    preset.fovX = fovX;
+    preset.fovY = fovY;
+    preset.minSpeedMultiplier = minSpeedMultiplier;
+    preset.maxSpeedMultiplier = maxSpeedMultiplier;
+    preset.predictionInterval = predictionInterval;
+    preset.prediction_futurePositions = prediction_futurePositions;
+    preset.draw_futurePositions = draw_futurePositions;
+    preset.snapRadius = snapRadius;
+    preset.nearRadius = nearRadius;
+    preset.speedCurveExponent = speedCurveExponent;
+    preset.snapBoostFactor = snapBoostFactor;
+    preset.auto_shoot = auto_shoot;
+    preset.bScope_multiplier = bScope_multiplier;
+    preset.auto_shoot_fire_delay_ms = auto_shoot_fire_delay_ms;
+    preset.auto_shoot_press_duration_ms = auto_shoot_press_duration_ms;
+    preset.auto_shoot_full_auto_grace_ms = auto_shoot_full_auto_grace_ms;
+    return preset;
 }
 
 bool Config::saveConfig(const std::string& filename)
@@ -504,6 +576,42 @@ bool Config::saveConfig(const std::string& filename)
         << "auto_shoot_fire_delay_ms = " << auto_shoot_fire_delay_ms << "\n"
         << "auto_shoot_press_duration_ms = " << auto_shoot_press_duration_ms << "\n"
         << "auto_shoot_full_auto_grace_ms = " << auto_shoot_full_auto_grace_ms << "\n\n";
+
+    file << "# Mouse AI\n";
+    file << "mouse_ai_mode = " << mouse_ai_mode << "\n";
+    auto presetToString = [](const MouseAIPreset& preset)
+    {
+        std::ostringstream oss;
+        oss << std::fixed;
+        oss << preset.fovX << "," << preset.fovY << ","
+            << std::setprecision(3) << preset.minSpeedMultiplier << ","
+            << std::setprecision(3) << preset.maxSpeedMultiplier << ","
+            << std::setprecision(3) << preset.predictionInterval << ","
+            << std::setprecision(0) << preset.prediction_futurePositions << ","
+            << (preset.draw_futurePositions ? 1 : 0) << ","
+            << std::setprecision(3) << preset.snapRadius << ","
+            << std::setprecision(3) << preset.nearRadius << ","
+            << std::setprecision(3) << preset.speedCurveExponent << ","
+            << std::setprecision(3) << preset.snapBoostFactor << ","
+            << (preset.auto_shoot ? 1 : 0) << ","
+            << std::setprecision(3) << preset.bScope_multiplier << ","
+            << std::setprecision(1) << preset.auto_shoot_fire_delay_ms << ","
+            << std::setprecision(1) << preset.auto_shoot_press_duration_ms << ","
+            << std::setprecision(1) << preset.auto_shoot_full_auto_grace_ms;
+        return oss.str();
+    };
+
+    auto presetOrFallback = [&](const std::string& key)
+    {
+        auto it = mouse_ai_presets.find(key);
+        if (it != mouse_ai_presets.end())
+            return it->second;
+        return captureMousePreset();
+    };
+
+    file << "mouse_ai_preset_aim_assist = " << presetToString(presetOrFallback("aim_assist")) << "\n";
+    file << "mouse_ai_preset_aim_bot = " << presetToString(presetOrFallback("aim_bot")) << "\n";
+    file << "mouse_ai_preset_rage_baiter = " << presetToString(presetOrFallback("rage_baiter")) << "\n\n";
 
     // AI
     file << "# AI\n"

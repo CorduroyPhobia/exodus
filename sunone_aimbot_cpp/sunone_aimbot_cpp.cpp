@@ -17,6 +17,7 @@
 #include "ghub.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
+#include "mouse/mouse_ai_tuner.h"
 
 std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
@@ -211,6 +212,7 @@ void mouseThreadFunction(MouseThread& mouseThread)
                     config.auto_shoot_full_auto_grace_ms
                 );
             }
+            mouseAITuner.notifyResolutionChanged(config.detection_resolution);
             detection_resolution_changed.store(false);
         }
 
@@ -270,6 +272,8 @@ void mouseThreadFunction(MouseThread& mouseThread)
         handleEasyNoRecoil(mouseThread);
 
         mouseThread.checkAndResetPredictions();
+
+        mouseAITuner.onSample(target);
 
         delete target;
     }
@@ -377,6 +381,7 @@ int main()
 
         globalMouseThread = &mouseThread;
         assignInputDevices();
+        mouseAITuner.initialize(&config, &mouseThread);
 
         std::vector<std::string> availableModels = getAvailableModels();
 

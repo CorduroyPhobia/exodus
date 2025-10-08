@@ -4,6 +4,7 @@
 #include <Windows.h>
 
 #include <shellapi.h>
+#include <cfloat>
 
 #include "imgui/imgui.h"
 #include <imgui_internal.h>
@@ -11,6 +12,7 @@
 #include "sunone_aimbot_cpp.h"
 #include "include/other_tools.h"
 #include "kmbox_net/picture.h"
+#include "mouse/mouse_ai_tuner.h"
 
 std::string ghub_version = get_ghub_version();
 
@@ -105,6 +107,40 @@ void draw_mouse()
     ImGui::SliderInt("FOV X", &config.fovX, 10, 120);
     ImGui::SliderInt("FOV Y", &config.fovY, 10, 120);
 
+    ImGui::SeparatorText("Mouse AI Tuner");
+    static const char* aiModeLabels[] = {
+        "Manual",
+        "Aim Assist (AI)",
+        "Aim Bot (AI)",
+        "Rage Baiter (AI)"
+    };
+    int aiModeIndex = static_cast<int>(mouseAITuner.mode());
+    if (ImGui::Combo("Automation Mode", &aiModeIndex, aiModeLabels, IM_ARRAYSIZE(aiModeLabels)))
+    {
+        mouseAITuner.setMode(static_cast<MouseAITuner::Mode>(aiModeIndex));
+    }
+
+    auto aiStatus = mouseAITuner.status();
+    if (aiStatus.active)
+    {
+        ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f), "%s", aiStatus.description.c_str());
+        ImGui::ProgressBar(aiStatus.progress, ImVec2(-FLT_MIN, 0.0f), aiStatus.exploring ? "Exploration" : "Baseline");
+        ImGui::TextDisabled("Baseline: %.2f  Candidate: %.2f  Last reward: %.2f",
+            aiStatus.baselineScore,
+            aiStatus.candidateScore,
+            aiStatus.lastReward);
+        if (ImGui::Button("Reset AI Calibration"))
+        {
+            mouseAITuner.resetCurrentMode();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Keep aiming at targets to continue calibration.");
+    }
+    else
+    {
+        ImGui::TextDisabled("AI idle. Choose an AI mode to auto-calibrate your mouse settings.");
+    }
+
     ImGui::SeparatorText("Speed Multiplier");
     ImGui::SliderFloat("Min Speed Multiplier", &config.minSpeedMultiplier, 0.1f, 5.0f, "%.1f");
     ImGui::SliderFloat("Max Speed Multiplier", &config.maxSpeedMultiplier, 0.1f, 5.0f, "%.1f");
@@ -176,6 +212,7 @@ void draw_mouse()
             config.auto_shoot_full_auto_grace_ms
         );
         input_method_changed.store(true);
+        mouseAITuner.notifyProfileChanged();
     }
 
     const auto& gp = config.currentProfile();
@@ -244,6 +281,7 @@ void draw_mouse()
             config.active_game = name;
             config.saveConfig();
             input_method_changed.store(true);
+            mouseAITuner.notifyProfileChanged();
             new_profile_name[0] = '\0'; // clear
         }
     }
@@ -261,6 +299,7 @@ void draw_mouse()
 
             config.saveConfig();
             input_method_changed.store(true);
+            mouseAITuner.notifyProfileChanged();
         }
         ImGui::PopStyleColor();
     }
