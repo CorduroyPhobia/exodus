@@ -66,8 +66,29 @@ void AITuner::setTargetRadius(float radius) {
 }
 
 void AITuner::setAutoCalibrate(bool enabled) {
-    std::lock_guard<std::mutex> lock(stateMutex);
-    autoCalibrate = enabled;
+    bool shouldStartCalibration = false;
+    bool shouldStopCalibration = false;
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        autoCalibrate = enabled;
+
+        if (autoCalibrate && !state.isCalibrating) {
+            shouldStartCalibration = true;
+        }
+
+        if (!autoCalibrate && state.isCalibrating) {
+            shouldStopCalibration = true;
+        }
+    }
+
+    if (shouldStartCalibration) {
+        startCalibration();
+    }
+
+    if (shouldStopCalibration) {
+        stopCalibration();
+    }
 }
 
 void AITuner::setSettingsBounds(const MouseSettings& min, const MouseSettings& max) {
@@ -82,10 +103,20 @@ void AITuner::startTraining() {
             std::cout << "[AITuner] Training already active" << std::endl;
             return; // Already training
         }
-        
+
         shouldStop = false;
         trainingThread = std::thread(&AITuner::trainingLoop, this);
         std::cout << "[AITuner] Training started successfully" << std::endl;
+
+        bool needsCalibration = false;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex);
+            needsCalibration = autoCalibrate && !state.isCalibrating;
+        }
+
+        if (needsCalibration) {
+            startCalibration();
+        }
     } catch (const std::exception& e) {
         std::cerr << "[AITuner] Error starting training: " << e.what() << std::endl;
     }
@@ -267,6 +298,7 @@ MouseSettings AITuner::getModeSettings(AimMode mode) const {
 }
 
 void AITuner::applyModeSettings(AimMode mode) {
+    std::lock_guard<std::mutex> lock(stateMutex);
     state.currentSettings = getModeSettings(mode);
     settingsHistory.push_back(state.currentSettings);
     rewardHistory.push_back(0.0);
@@ -380,51 +412,86 @@ void AITuner::trainingLoop() {
     try {
         while (!shouldStop && state.iteration < maxIterations) {
             std::unique_lock<std::mutex> lock(queueMutex);
-            
+
             // Wait for feedback or timeout
             cv.wait_for(lock, std::chrono::milliseconds(100), [this] { return !feedbackQueue.empty() || shouldStop; });
-            
+
             if (shouldStop) break;
-            
+
             if (!feedbackQueue.empty()) {
                 auto feedback = feedbackQueue.front();
                 feedbackQueue.pop();
                 lock.unlock();
-                
+
                 // Process feedback
                 double reward = feedback.second;
-                state.currentReward = reward;
-                rewardHistory.push_back(reward);
-                
+
+                MouseSettings currentSettingsSnapshot;
+                bool isCalibratingSnapshot = false;
+                double currentRewardSnapshot = reward;
+                {
+                    std::lock_guard<std::mutex> stateLock(stateMutex);
+                    state.currentReward = reward;
+                    rewardHistory.push_back(reward);
+                    currentSettingsSnapshot = state.currentSettings;
+                    isCalibratingSnapshot = state.isCalibrating;
+                    currentRewardSnapshot = state.currentReward;
+                }
+
+                bool stopCalibrationAfterUpdate = false;
+                MouseSettings updatedSettings = currentSettingsSnapshot;
+                bool appliedNewSettings = false;
+
                 // Update settings based on reward
-                if (state.isCalibrating) {
+                if (isCalibratingSnapshot) {
                     // During calibration, gradually increase sensitivity
-                    if (reward < 0.3 && state.currentSettings.sensitivity < maxSettings.sensitivity) {
-                        state.currentSettings.sensitivity *= 1.1f;
-                        state.currentSettings.sensitivity = std::min(state.currentSettings.sensitivity, maxSettings.sensitivity);
+                    if (reward < 0.3 && updatedSettings.sensitivity < maxSettings.sensitivity) {
+                        updatedSettings.sensitivity *= 1.1f;
+                        updatedSettings.sensitivity = std::min(updatedSettings.sensitivity, maxSettings.sensitivity);
+                        appliedNewSettings = true;
                     }
-                    if (reward < 0.3 && state.currentSettings.dpi < maxSettings.dpi) {
-                        state.currentSettings.dpi = std::min(state.currentSettings.dpi + 100, maxSettings.dpi);
+                    if (reward < 0.3 && updatedSettings.dpi < maxSettings.dpi) {
+                        updatedSettings.dpi = std::min(updatedSettings.dpi + 100, maxSettings.dpi);
+                        appliedNewSettings = true;
+                    }
+
+                    if (reward >= 0.8 ||
+                        updatedSettings.sensitivity >= maxSettings.sensitivity ||
+                        updatedSettings.dpi >= maxSettings.dpi) {
+                        stopCalibrationAfterUpdate = true;
                     }
                 } else {
                     // Normal training - explore and exploit
                     if (floatDist(rng) < explorationRate) {
                         // Explore: try random settings
-                        MouseSettings newSettings = generateRandomSettings();
-                        updateSettings(newSettings);
+                        updatedSettings = generateRandomSettings();
                     } else {
                         // Exploit: improve current settings
-                        MouseSettings mutated = mutateSettings(state.currentSettings);
-                        updateSettings(mutated);
+                        updatedSettings = mutateSettings(currentSettingsSnapshot);
                     }
+                    appliedNewSettings = true;
                 }
-                
-                settingsHistory.push_back(state.currentSettings);
-                state.iteration++;
-                
-                if (state.iteration % 100 == 0) {
-                    std::cout << "[AITuner] Iteration " << state.iteration 
-                             << ", Reward: " << state.currentReward 
+
+                if (appliedNewSettings) {
+                    updateSettings(updatedSettings);
+                    currentSettingsSnapshot = updatedSettings;
+                }
+
+                int iterationSnapshot = 0;
+                {
+                    std::lock_guard<std::mutex> stateLock(stateMutex);
+                    settingsHistory.push_back(currentSettingsSnapshot);
+                    state.iteration++;
+                    iterationSnapshot = state.iteration;
+                }
+
+                if (stopCalibrationAfterUpdate) {
+                    stopCalibration();
+                }
+
+                if (iterationSnapshot % 100 == 0) {
+                    std::cout << "[AITuner] Iteration " << iterationSnapshot
+                             << ", Reward: " << currentRewardSnapshot
                              << ", Success Rate: " << getSuccessRate() << std::endl;
                 }
             }
