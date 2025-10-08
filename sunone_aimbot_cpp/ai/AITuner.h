@@ -1,11 +1,8 @@
 #ifndef AI_TUNER_H
 #define AI_TUNER_H
 
-#include <condition_variable>
-#include <deque>
 #include <mutex>
 #include <random>
-#include <thread>
 #include <vector>
 
 #include "AimbotTarget.h"
@@ -83,12 +80,6 @@ public:
     void applyModeSettings(AimMode mode);
 
 private:
-    struct FeedbackEvent {
-        AimbotTarget target;
-        double mouseX = 0.0;
-        double mouseY = 0.0;
-    };
-
     struct Config {
         float learningRate = 0.01f;
         float explorationRate = 0.15f;
@@ -105,6 +96,9 @@ private:
         int iteration = 0;
         int calibrationStep = 0;
         int calibrationBudget = 64;
+        int calibrationSamples = 0;
+        int calibrationSamplesPerSetting = 4;
+        double calibrationAccumulatedReward = 0.0;
         double lastReward = 0.0;
         double totalReward = 0.0;
         double bestReward = 0.0;
@@ -119,16 +113,11 @@ private:
     };
 
     mutable std::mutex mutex;
-    std::condition_variable condition;
-    std::deque<FeedbackEvent> feedbackQueue;
-    std::thread workerThread;
-    bool stopWorker = false;
 
     Config config;
     RuntimeState state;
     std::mt19937 rng;
 
-    void trainingLoop();
     MouseSettings clampSettings(const MouseSettings& settings,
                                 const MouseSettings& minBounds,
                                 const MouseSettings& maxBounds) const;
@@ -138,7 +127,10 @@ private:
                                  const MouseSettings& minBounds,
                                  const MouseSettings& maxBounds,
                                  float intensity);
-    double calculateReward(const FeedbackEvent& event, float radius) const;
+    double calculateReward(const AimbotTarget& target,
+                           double mouseX,
+                           double mouseY,
+                           float radius) const;
     MouseSettings defaultsForMode(AimMode mode) const;
     void applyModeLocked(AimMode mode);
 };
