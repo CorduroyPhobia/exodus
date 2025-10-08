@@ -9,13 +9,11 @@
 #include "../ai/AITuner.h"
 
 extern AITuner* globalAITuner;
+extern std::mutex globalAITunerMutex;
+static bool aiTunerInitialized = false;
 
 void draw_ai_tuning()
 {
-    if (!globalAITuner) {
-        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "AI Tuner not initialized!");
-        return;
-    }
 
     ImGui::SeparatorText("AI Tuning System");
     
@@ -25,10 +23,52 @@ void draw_ai_tuning()
         config.ai_tuning_enabled = aiEnabled;
         config.saveConfig();
         
-        if (aiEnabled && globalAITuner) {
-            globalAITuner->startTraining();
-        } else if (globalAITuner) {
-            globalAITuner->stopTraining();
+        std::lock_guard<std::mutex> lock(globalAITunerMutex);
+        
+        if (aiEnabled) {
+            // Create AI tuner if it doesn't exist
+            if (!globalAITuner && !aiTunerInitialized) {
+                try {
+                    aiTunerInitialized = true;
+                    globalAITuner = new AITuner();
+                    globalAITuner->setLearningRate(config.ai_learning_rate);
+                    globalAITuner->setExplorationRate(config.ai_exploration_rate);
+                    globalAITuner->setMaxIterations(config.ai_training_iterations);
+                    globalAITuner->setTargetRadius(config.ai_target_radius);
+                    globalAITuner->setAutoCalibrate(config.ai_auto_calibrate);
+                    
+                    // Set aim mode
+                    AimMode mode = AimMode::AIM_ASSIST;
+                    if (config.ai_aim_mode == "aim_bot") mode = AimMode::AIM_BOT;
+                    else if (config.ai_aim_mode == "rage_baiter") mode = AimMode::RAGE_BAITER;
+                    globalAITuner->setAimMode(mode);
+                    
+                    // Set settings bounds
+                    MouseSettings minSettings(config.ai_dpi_min, config.ai_sensitivity_min, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
+                    MouseSettings maxSettings(config.ai_dpi_max, config.ai_sensitivity_max, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
+                    globalAITuner->setSettingsBounds(minSettings, maxSettings);
+                    
+                    std::cout << "[AI Tuner] Created successfully" << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "[AI Tuner] Failed to create: " << e.what() << std::endl;
+                    globalAITuner = nullptr;
+                    aiTunerInitialized = false;
+                    config.ai_tuning_enabled = false;
+                    config.saveConfig();
+                }
+            }
+            
+            if (globalAITuner) {
+                globalAITuner->startTraining();
+            }
+        } else {
+            if (globalAITuner) {
+                globalAITuner->stopTraining();
+                delete globalAITuner;
+                globalAITuner = nullptr;
+                aiTunerInitialized = false;
+                std::cout << "[AI Tuner] Destroyed" << std::endl;
+            }
         }
     }
     
