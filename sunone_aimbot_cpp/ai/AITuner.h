@@ -4,6 +4,7 @@
 #include <mutex>
 #include <random>
 #include <vector>
+#include <cstddef>
 
 #include "AimbotTarget.h"
 
@@ -94,11 +95,12 @@ private:
         bool paused = false;
         bool calibrating = false;
         int iteration = 0;
-        int calibrationStep = 0;
-        int calibrationBudget = 64;
-        int calibrationSamples = 0;
-        int calibrationSamplesPerSetting = 4;
-        double calibrationAccumulatedReward = 0.0;
+        int totalIterations = 0;
+        int evaluationSamplesCollected = 0;
+        int evaluationWindow = 12;
+        int calibrationBudget = 12;
+        std::size_t calibrationIndex = 0;
+        double evaluationRewardSum = 0.0;
         double lastReward = 0.0;
         double totalReward = 0.0;
         double bestReward = 0.0;
@@ -108,6 +110,7 @@ private:
         MouseSettings maxBounds{};
         MouseSettings currentSettings{};
         MouseSettings bestSettings{};
+        std::vector<MouseSettings> calibrationSchedule;
         std::vector<MouseSettings> settingsHistory;
         std::vector<double> rewardHistory;
     };
@@ -121,6 +124,9 @@ private:
     MouseSettings clampSettings(const MouseSettings& settings,
                                 const MouseSettings& minBounds,
                                 const MouseSettings& maxBounds) const;
+    MouseSettings sanitizeSettings(const MouseSettings& settings,
+                                   const MouseSettings& minBounds,
+                                   const MouseSettings& maxBounds) const;
     MouseSettings randomSettings(const MouseSettings& minBounds,
                                  const MouseSettings& maxBounds);
     MouseSettings mutateSettings(const MouseSettings& base,
@@ -133,6 +139,12 @@ private:
                            float radius) const;
     MouseSettings defaultsForMode(AimMode mode) const;
     void applyModeLocked(AimMode mode);
+    void resetStatisticsLocked();
+    void beginEvaluationLocked(const MouseSettings& candidate, bool clearAccum = true);
+    void finalizeEvaluationLocked(double averageReward);
+    void rebuildCalibrationScheduleLocked();
+    MouseSettings generateExplorationCandidateLocked();
+    void trimHistoryLocked();
 };
 
 #endif // AI_TUNER_H
