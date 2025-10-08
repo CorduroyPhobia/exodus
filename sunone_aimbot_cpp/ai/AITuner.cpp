@@ -20,12 +20,19 @@ AITuner::AITuner()
     , successfulTargets(0)
     , totalTargets(0)
 {
-    // Set default bounds
-    minSettings = MouseSettings(400, 0.1f, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
-    maxSettings = MouseSettings(16000, 5.0f, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
-    
-    // Initialize with mode-specific settings
-    applyModeSettings(currentMode);
+    try {
+        // Set default bounds
+        minSettings = MouseSettings(400, 0.1f, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
+        maxSettings = MouseSettings(16000, 5.0f, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
+        
+        // Initialize with mode-specific settings
+        applyModeSettings(currentMode);
+        
+        std::cout << "[AITuner] Constructor completed successfully" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[AITuner] Constructor error: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 AITuner::~AITuner() {
@@ -70,12 +77,18 @@ void AITuner::setSettingsBounds(const MouseSettings& min, const MouseSettings& m
 }
 
 void AITuner::startTraining() {
-    if (trainingThread.joinable()) {
-        return; // Already training
+    try {
+        if (trainingThread.joinable()) {
+            std::cout << "[AITuner] Training already active" << std::endl;
+            return; // Already training
+        }
+        
+        shouldStop = false;
+        trainingThread = std::thread(&AITuner::trainingLoop, this);
+        std::cout << "[AITuner] Training started successfully" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[AITuner] Error starting training: " << e.what() << std::endl;
     }
-    
-    shouldStop = false;
-    trainingThread = std::thread(&AITuner::trainingLoop, this);
 }
 
 void AITuner::stopTraining() {
@@ -117,10 +130,20 @@ void AITuner::resetTraining() {
 }
 
 void AITuner::provideFeedback(const AimbotTarget& target, double mouseX, double mouseY) {
-    std::lock_guard<std::mutex> lock(queueMutex);
-    double reward = calculateReward(target, mouseX, mouseY);
-    feedbackQueue.push({target, reward});
-    cv.notify_all();
+    try {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        
+        // Prevent queue from growing too large
+        if (feedbackQueue.size() > 100) {
+            feedbackQueue.pop(); // Remove oldest feedback
+        }
+        
+        double reward = calculateReward(target, mouseX, mouseY);
+        feedbackQueue.push({target, reward});
+        cv.notify_all();
+    } catch (const std::exception& e) {
+        std::cerr << "[AITuner] Error providing feedback: " << e.what() << std::endl;
+    }
 }
 
 void AITuner::startCalibration() {
@@ -354,55 +377,59 @@ void AITuner::updateSettings(const MouseSettings& newSettings) {
 }
 
 void AITuner::trainingLoop() {
-    while (!shouldStop && state.iteration < maxIterations) {
-        std::unique_lock<std::mutex> lock(queueMutex);
-        
-        // Wait for feedback or timeout
-        cv.wait_for(lock, std::chrono::milliseconds(100), [this] { return !feedbackQueue.empty() || shouldStop; });
-        
-        if (shouldStop) break;
-        
-        if (!feedbackQueue.empty()) {
-            auto feedback = feedbackQueue.front();
-            feedbackQueue.pop();
-            lock.unlock();
+    try {
+        while (!shouldStop && state.iteration < maxIterations) {
+            std::unique_lock<std::mutex> lock(queueMutex);
             
-            // Process feedback
-            double reward = feedback.second;
-            state.currentReward = reward;
-            rewardHistory.push_back(reward);
+            // Wait for feedback or timeout
+            cv.wait_for(lock, std::chrono::milliseconds(100), [this] { return !feedbackQueue.empty() || shouldStop; });
             
-            // Update settings based on reward
-            if (state.isCalibrating) {
-                // During calibration, gradually increase sensitivity
-                if (reward < 0.3 && state.currentSettings.sensitivity < maxSettings.sensitivity) {
-                    state.currentSettings.sensitivity *= 1.1f;
-                    state.currentSettings.sensitivity = std::min(state.currentSettings.sensitivity, maxSettings.sensitivity);
-                }
-                if (reward < 0.3 && state.currentSettings.dpi < maxSettings.dpi) {
-                    state.currentSettings.dpi = std::min(state.currentSettings.dpi + 100, maxSettings.dpi);
-                }
-            } else {
-                // Normal training - explore and exploit
-                if (floatDist(rng) < explorationRate) {
-                    // Explore: try random settings
-                    MouseSettings newSettings = generateRandomSettings();
-                    updateSettings(newSettings);
+            if (shouldStop) break;
+            
+            if (!feedbackQueue.empty()) {
+                auto feedback = feedbackQueue.front();
+                feedbackQueue.pop();
+                lock.unlock();
+                
+                // Process feedback
+                double reward = feedback.second;
+                state.currentReward = reward;
+                rewardHistory.push_back(reward);
+                
+                // Update settings based on reward
+                if (state.isCalibrating) {
+                    // During calibration, gradually increase sensitivity
+                    if (reward < 0.3 && state.currentSettings.sensitivity < maxSettings.sensitivity) {
+                        state.currentSettings.sensitivity *= 1.1f;
+                        state.currentSettings.sensitivity = std::min(state.currentSettings.sensitivity, maxSettings.sensitivity);
+                    }
+                    if (reward < 0.3 && state.currentSettings.dpi < maxSettings.dpi) {
+                        state.currentSettings.dpi = std::min(state.currentSettings.dpi + 100, maxSettings.dpi);
+                    }
                 } else {
-                    // Exploit: improve current settings
-                    MouseSettings mutated = mutateSettings(state.currentSettings);
-                    updateSettings(mutated);
+                    // Normal training - explore and exploit
+                    if (floatDist(rng) < explorationRate) {
+                        // Explore: try random settings
+                        MouseSettings newSettings = generateRandomSettings();
+                        updateSettings(newSettings);
+                    } else {
+                        // Exploit: improve current settings
+                        MouseSettings mutated = mutateSettings(state.currentSettings);
+                        updateSettings(mutated);
+                    }
                 }
-            }
-            
-            settingsHistory.push_back(state.currentSettings);
-            state.iteration++;
-            
-            if (state.iteration % 100 == 0) {
-                std::cout << "[AITuner] Iteration " << state.iteration 
-                         << ", Reward: " << state.currentReward 
-                         << ", Success Rate: " << getSuccessRate() << std::endl;
+                
+                settingsHistory.push_back(state.currentSettings);
+                state.iteration++;
+                
+                if (state.iteration % 100 == 0) {
+                    std::cout << "[AITuner] Iteration " << state.iteration 
+                             << ", Reward: " << state.currentReward 
+                             << ", Success Rate: " << getSuccessRate() << std::endl;
+                }
             }
         }
+    } catch (const std::exception& e) {
+        std::cerr << "[AITuner] Training loop error: " << e.what() << std::endl;
     }
 }

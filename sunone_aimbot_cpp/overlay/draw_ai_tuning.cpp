@@ -25,9 +25,9 @@ void draw_ai_tuning()
         config.ai_tuning_enabled = aiEnabled;
         config.saveConfig();
         
-        if (aiEnabled) {
+        if (aiEnabled && globalAITuner) {
             globalAITuner->startTraining();
-        } else {
+        } else if (globalAITuner) {
             globalAITuner->stopTraining();
         }
     }
@@ -57,8 +57,10 @@ void draw_ai_tuning()
         config.saveConfig();
         
         // Apply mode to AI tuner
-        AimMode mode = static_cast<AimMode>(selected_mode);
-        globalAITuner->setAimMode(mode);
+        if (globalAITuner) {
+            AimMode mode = static_cast<AimMode>(selected_mode);
+            globalAITuner->setAimMode(mode);
+        }
     }
     
     // Mode descriptions
@@ -73,7 +75,9 @@ void draw_ai_tuning()
     if (ImGui::SliderFloat("Learning Rate", &learningRate, 0.001f, 0.1f, "%.3f")) {
         config.ai_learning_rate = learningRate;
         config.saveConfig();
-        globalAITuner->setLearningRate(learningRate);
+        if (globalAITuner) {
+            globalAITuner->setLearningRate(learningRate);
+        }
     }
     
     // Exploration Rate
@@ -81,7 +85,9 @@ void draw_ai_tuning()
     if (ImGui::SliderFloat("Exploration Rate", &explorationRate, 0.01f, 0.5f, "%.2f")) {
         config.ai_exploration_rate = explorationRate;
         config.saveConfig();
-        globalAITuner->setExplorationRate(explorationRate);
+        if (globalAITuner) {
+            globalAITuner->setExplorationRate(explorationRate);
+        }
     }
     
     // Target Radius
@@ -89,7 +95,9 @@ void draw_ai_tuning()
     if (ImGui::SliderFloat("Target Radius", &targetRadius, 1.0f, 50.0f, "%.1f")) {
         config.ai_target_radius = targetRadius;
         config.saveConfig();
-        globalAITuner->setTargetRadius(targetRadius);
+        if (globalAITuner) {
+            globalAITuner->setTargetRadius(targetRadius);
+        }
     }
     
     // Auto Calibrate
@@ -97,14 +105,16 @@ void draw_ai_tuning()
     if (ImGui::Checkbox("Auto Calibrate", &autoCalibrate)) {
         config.ai_auto_calibrate = autoCalibrate;
         config.saveConfig();
-        globalAITuner->setAutoCalibrate(autoCalibrate);
+        if (globalAITuner) {
+            globalAITuner->setAutoCalibrate(autoCalibrate);
+        }
     }
     
     ImGui::SeparatorText("Training Control");
     
     // Training status
-    bool isTraining = globalAITuner->isTraining();
-    bool isCalibrating = globalAITuner->isCalibrating();
+    bool isTraining = globalAITuner ? globalAITuner->isTraining() : false;
+    bool isCalibrating = globalAITuner ? globalAITuner->isCalibrating() : false;
     
     if (isTraining) {
         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Training: ACTIVE");
@@ -117,40 +127,47 @@ void draw_ai_tuning()
     }
     
     // Training controls
-    if (!isTraining) {
-        if (ImGui::Button("Start Training")) {
-            globalAITuner->startTraining();
+    if (globalAITuner) {
+        if (!isTraining) {
+            if (ImGui::Button("Start Training")) {
+                globalAITuner->startTraining();
+            }
+        } else {
+            if (ImGui::Button("Stop Training")) {
+                globalAITuner->stopTraining();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Pause Training")) {
+                globalAITuner->pauseTraining();
+            }
         }
-    } else {
-        if (ImGui::Button("Stop Training")) {
-            globalAITuner->stopTraining();
+        
+        if (!isCalibrating) {
+            ImGui::SameLine();
+            if (ImGui::Button("Start Calibration")) {
+                globalAITuner->startCalibration();
+            }
+        } else {
+            ImGui::SameLine();
+            if (ImGui::Button("Stop Calibration")) {
+                globalAITuner->stopCalibration();
+            }
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Pause Training")) {
-            globalAITuner->pauseTraining();
+        
+        if (ImGui::Button("Reset Training")) {
+            globalAITuner->resetTraining();
         }
-    }
-    
-    if (!isCalibrating) {
-        ImGui::SameLine();
-        if (ImGui::Button("Start Calibration")) {
-            globalAITuner->startCalibration();
-        }
-    } else {
-        ImGui::SameLine();
-        if (ImGui::Button("Stop Calibration")) {
-            globalAITuner->stopCalibration();
-        }
-    }
-    
-    if (ImGui::Button("Reset Training")) {
-        globalAITuner->resetTraining();
     }
     
     ImGui::SeparatorText("Training Statistics");
     
     // Get training stats
-    auto stats = globalAITuner->getTrainingStats();
+    AITuner::TrainingStats stats;
+    if (globalAITuner) {
+        stats = globalAITuner->getTrainingStats();
+    } else {
+        stats = AITuner::TrainingStats{0.0, 0.0, 0.0, 0, 0, false, false};
+    }
     
     ImGui::Text("Current Iteration: %d / %d", stats.currentIteration, stats.totalIterations);
     ImGui::Text("Average Reward: %.3f", stats.averageReward);
@@ -164,7 +181,12 @@ void draw_ai_tuning()
     ImGui::SeparatorText("Current Settings");
     
     // Display current AI-tuned settings
-    auto currentSettings = globalAITuner->getCurrentSettings();
+    MouseSettings currentSettings;
+    if (globalAITuner) {
+        currentSettings = globalAITuner->getCurrentSettings();
+    } else {
+        currentSettings = MouseSettings();
+    }
     
     ImGui::Text("DPI: %d", currentSettings.dpi);
     ImGui::Text("Sensitivity: %.2f", currentSettings.sensitivity);
@@ -195,7 +217,7 @@ void draw_ai_tuning()
     ImGui::Text("Sensitivity Range: %.2f - %.2f", config.ai_sensitivity_min, config.ai_sensitivity_max);
     ImGui::Text("DPI Range: %d - %d", config.ai_dpi_min, config.ai_dpi_max);
     
-    if (ImGui::Button("Apply Best Settings")) {
+    if (ImGui::Button("Apply Best Settings") && globalAITuner) {
         auto bestSettings = globalAITuner->getBestSettings();
         
         // Apply best settings to config
@@ -237,7 +259,7 @@ void draw_ai_tuning()
     }
     
     ImGui::SameLine();
-    if (ImGui::Button("Reset to Defaults")) {
+    if (ImGui::Button("Reset to Defaults") && globalAITuner) {
         // Reset to default mode settings
         globalAITuner->applyModeSettings(static_cast<AimMode>(selected_mode));
     }

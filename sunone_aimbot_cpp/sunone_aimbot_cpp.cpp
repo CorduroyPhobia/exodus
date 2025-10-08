@@ -251,10 +251,14 @@ void mouseThreadFunction(MouseThread& mouseThread)
                 // Provide feedback to AI tuner
                 if (globalAITuner && config.ai_tuning_enabled)
                 {
-                    // Get current mouse position (center of screen)
-                    double mouseX = config.detection_resolution / 2.0;
-                    double mouseY = config.detection_resolution / 2.0;
-                    globalAITuner->provideFeedback(*target, mouseX, mouseY);
+                    try {
+                        // Get current mouse position (center of screen)
+                        double mouseX = config.detection_resolution / 2.0;
+                        double mouseY = config.detection_resolution / 2.0;
+                        globalAITuner->provideFeedback(*target, mouseX, mouseY);
+                    } catch (const std::exception& e) {
+                        std::cerr << "[AI Tuner] Error providing feedback: " << e.what() << std::endl;
+                    }
                 }
 
                 if (config.auto_shoot)
@@ -288,26 +292,30 @@ void mouseThreadFunction(MouseThread& mouseThread)
         if (globalAITuner && config.ai_tuning_enabled && 
             std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAISettingsUpdate).count() > 1000) // Update every second
         {
-            auto currentSettings = globalAITuner->getCurrentSettings();
-            mouseThread.applyAISettings(
-                currentSettings.dpi,
-                currentSettings.sensitivity,
-                currentSettings.minSpeedMultiplier,
-                currentSettings.maxSpeedMultiplier,
-                currentSettings.predictionInterval,
-                currentSettings.snapRadius,
-                currentSettings.nearRadius,
-                currentSettings.speedCurveExponent,
-                currentSettings.snapBoostFactor,
-                currentSettings.wind_mouse_enabled,
-                currentSettings.wind_G,
-                currentSettings.wind_W,
-                currentSettings.wind_M,
-                currentSettings.wind_D,
-                currentSettings.easynorecoil,
-                currentSettings.easynorecoilstrength
-            );
-            lastAISettingsUpdate = now;
+            try {
+                auto currentSettings = globalAITuner->getCurrentSettings();
+                mouseThread.applyAISettings(
+                    currentSettings.dpi,
+                    currentSettings.sensitivity,
+                    currentSettings.minSpeedMultiplier,
+                    currentSettings.maxSpeedMultiplier,
+                    currentSettings.predictionInterval,
+                    currentSettings.snapRadius,
+                    currentSettings.nearRadius,
+                    currentSettings.speedCurveExponent,
+                    currentSettings.snapBoostFactor,
+                    currentSettings.wind_mouse_enabled,
+                    currentSettings.wind_G,
+                    currentSettings.wind_W,
+                    currentSettings.wind_M,
+                    currentSettings.wind_D,
+                    currentSettings.easynorecoil,
+                    currentSettings.easynorecoilstrength
+                );
+                lastAISettingsUpdate = now;
+            } catch (const std::exception& e) {
+                std::cerr << "[AI Tuner] Error applying settings: " << e.what() << std::endl;
+            }
         }
 
         delete target;
@@ -417,26 +425,33 @@ int main()
         globalMouseThread = &mouseThread;
         
         // Initialize AI Tuner
-        globalAITuner = new AITuner();
-        globalAITuner->setLearningRate(config.ai_learning_rate);
-        globalAITuner->setExplorationRate(config.ai_exploration_rate);
-        globalAITuner->setMaxIterations(config.ai_training_iterations);
-        globalAITuner->setTargetRadius(config.ai_target_radius);
-        globalAITuner->setAutoCalibrate(config.ai_auto_calibrate);
-        
-        // Set aim mode
-        AimMode mode = AimMode::AIM_ASSIST;
-        if (config.ai_aim_mode == "aim_bot") mode = AimMode::AIM_BOT;
-        else if (config.ai_aim_mode == "rage_baiter") mode = AimMode::RAGE_BAITER;
-        globalAITuner->setAimMode(mode);
-        
-        // Set settings bounds
-        MouseSettings minSettings(config.ai_dpi_min, config.ai_sensitivity_min, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
-        MouseSettings maxSettings(config.ai_dpi_max, config.ai_sensitivity_max, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
-        globalAITuner->setSettingsBounds(minSettings, maxSettings);
-        
-        if (config.ai_tuning_enabled) {
-            globalAITuner->startTraining();
+        try {
+            globalAITuner = new AITuner();
+            globalAITuner->setLearningRate(config.ai_learning_rate);
+            globalAITuner->setExplorationRate(config.ai_exploration_rate);
+            globalAITuner->setMaxIterations(config.ai_training_iterations);
+            globalAITuner->setTargetRadius(config.ai_target_radius);
+            globalAITuner->setAutoCalibrate(config.ai_auto_calibrate);
+            
+            // Set aim mode
+            AimMode mode = AimMode::AIM_ASSIST;
+            if (config.ai_aim_mode == "aim_bot") mode = AimMode::AIM_BOT;
+            else if (config.ai_aim_mode == "rage_baiter") mode = AimMode::RAGE_BAITER;
+            globalAITuner->setAimMode(mode);
+            
+            // Set settings bounds
+            MouseSettings minSettings(config.ai_dpi_min, config.ai_sensitivity_min, 0.01f, 0.01f, 0.001f, 0.5f, 5.0f, 1.0f, 1.0f, false, 10.0f, 5.0f, 5.0f, 3.0f, false, 0.0f);
+            MouseSettings maxSettings(config.ai_dpi_max, config.ai_sensitivity_max, 2.0f, 2.0f, 0.1f, 5.0f, 100.0f, 10.0f, 3.0f, true, 50.0f, 30.0f, 20.0f, 15.0f, true, 2.0f);
+            globalAITuner->setSettingsBounds(minSettings, maxSettings);
+            
+            if (config.ai_tuning_enabled) {
+                globalAITuner->startTraining();
+            }
+            
+            std::cout << "[MAIN] AI Tuner initialized successfully." << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "[MAIN] Failed to initialize AI Tuner: " << e.what() << std::endl;
+            globalAITuner = nullptr;
         }
         
         assignInputDevices();
