@@ -42,7 +42,7 @@ AITuner::~AITuner() {
 void AITuner::setAimMode(AimMode mode) {
     std::lock_guard<std::mutex> lock(stateMutex);
     currentMode = mode;
-    applyModeSettings(mode);
+    applyModeSettingsLocked(mode);
 }
 
 void AITuner::setLearningRate(float rate) {
@@ -146,7 +146,7 @@ void AITuner::resumeTraining() {
 
 void AITuner::resetTraining() {
     stopTraining();
-    
+
     std::lock_guard<std::mutex> lock(stateMutex);
     state.iteration = 0;
     state.currentReward = 0.0;
@@ -157,7 +157,7 @@ void AITuner::resetTraining() {
     successfulTargets = 0;
     totalTargets = 0;
     
-    applyModeSettings(currentMode);
+    applyModeSettingsLocked(currentMode);
 }
 
 void AITuner::provideFeedback(const AimbotTarget& target, double mouseX, double mouseY) {
@@ -304,11 +304,16 @@ MouseSettings AITuner::getModeSettings(AimMode mode) const {
     return settings;
 }
 
-void AITuner::applyModeSettings(AimMode mode) {
-    std::lock_guard<std::mutex> lock(stateMutex);
+void AITuner::applyModeSettingsLocked(AimMode mode) {
     state.currentSettings = getModeSettings(mode);
     settingsHistory.push_back(state.currentSettings);
     rewardHistory.push_back(0.0);
+}
+
+void AITuner::applyModeSettings(AimMode mode) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    currentMode = mode;
+    applyModeSettingsLocked(mode);
 }
 
 MouseSettings AITuner::generateRandomSettings(const MouseSettings& minBounds, const MouseSettings& maxBounds) {

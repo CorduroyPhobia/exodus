@@ -119,6 +119,7 @@ private:
     RewardSample calculateReward(const AimbotTarget& target, double mouseX, double mouseY, double radius) const;
     MouseSettings interpolateSettings(const MouseSettings& a, const MouseSettings& b, float t);
     void updateSettings(const MouseSettings& newSettings);
+    void applyModeSettingsLocked(AimMode mode);
     void trainingLoop();
     
 public:
