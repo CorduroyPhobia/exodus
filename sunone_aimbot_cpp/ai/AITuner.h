@@ -89,7 +89,14 @@ private:
     std::atomic<bool> shouldStop;
     std::mutex stateMutex;
     std::condition_variable cv;
-    std::queue<std::pair<AimbotTarget, double>> feedbackQueue;
+
+    struct FeedbackSample {
+        AimbotTarget target;
+        double reward;
+        bool targetHit;
+    };
+
+    std::queue<FeedbackSample> feedbackQueue;
     std::mutex queueMutex;
     
     // Performance tracking
@@ -97,11 +104,19 @@ private:
     double totalReward;
     int successfulTargets;
     int totalTargets;
-    
+
+    struct RewardSample {
+        double reward;
+        bool targetHit;
+    };
+
     // Helper methods
-    MouseSettings generateRandomSettings();
-    MouseSettings mutateSettings(const MouseSettings& base);
-    double calculateReward(const AimbotTarget& target, double mouseX, double mouseY);
+    MouseSettings generateRandomSettings(const MouseSettings& minBounds, const MouseSettings& maxBounds);
+    MouseSettings mutateSettings(const MouseSettings& base,
+                                 const MouseSettings& minBounds,
+                                 const MouseSettings& maxBounds,
+                                 float explorationRateValue);
+    RewardSample calculateReward(const AimbotTarget& target, double mouseX, double mouseY, double radius) const;
     MouseSettings interpolateSettings(const MouseSettings& a, const MouseSettings& b, float t);
     void updateSettings(const MouseSettings& newSettings);
     void trainingLoop();
