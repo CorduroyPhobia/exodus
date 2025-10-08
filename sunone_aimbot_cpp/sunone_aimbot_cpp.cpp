@@ -23,7 +23,7 @@ std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
 std::atomic<bool> aiming(false);
 std::atomic<bool> detectionPaused(false);
-std::mutex configMutex;
+std::recursive_mutex configMutex;
 
 #ifdef USE_CUDA
 TrtDetector trt_detector;
@@ -197,7 +197,7 @@ void mouseThreadFunction(MouseThread& mouseThread)
         if (detection_resolution_changed.load())
         {
             {
-                std::lock_guard<std::mutex> cfgLock(configMutex);
+                std::lock_guard<std::recursive_mutex> cfgLock(configMutex);
                 mouseThread.updateConfig(
                     config.detection_resolution,
                     config.fovX,

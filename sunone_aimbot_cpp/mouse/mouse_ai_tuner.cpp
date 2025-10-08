@@ -426,7 +426,7 @@ void MouseAITuner::ensureStateInitialized(Mode mode)
 
     Config::MouseAIPreset preset = midpointPreset(mode);
     {
-        std::lock_guard<std::mutex> cfgLock(configMutex);
+        std::lock_guard<std::recursive_mutex> cfgLock(configMutex);
         auto it = configRef_->mouse_ai_presets.find(modeKey(mode));
         if (it != configRef_->mouse_ai_presets.end())
         {
@@ -612,7 +612,7 @@ void MouseAITuner::applyPreset(Mode mode, const Config::MouseAIPreset& preset)
     double grace = sanitized.auto_shoot_full_auto_grace_ms;
 
     {
-        std::lock_guard<std::mutex> cfgLock(configMutex);
+        std::lock_guard<std::recursive_mutex> cfgLock(configMutex);
         configRef_->fovX = sanitized.fovX;
         configRef_->fovY = sanitized.fovY;
         configRef_->minSpeedMultiplier = sanitized.minSpeedMultiplier;
@@ -650,7 +650,7 @@ void MouseAITuner::persistAll(Mode mode, const Config::MouseAIPreset* presetIfAn
     if (!configRef_)
         return;
 
-    std::lock_guard<std::mutex> cfgLock(configMutex);
+    std::lock_guard<std::recursive_mutex> cfgLock(configMutex);
     configRef_->mouse_ai_mode = modeToString(currentMode_);
     if (presetIfAny && mode != Mode::Manual)
     {

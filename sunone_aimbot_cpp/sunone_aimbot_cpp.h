@@ -22,7 +22,7 @@ extern TrtDetector trt_detector;
 extern DirectMLDetector* dml_detector;
 extern DetectionBuffer detectionBuffer;
 extern MouseThread* globalMouseThread;
-extern std::mutex configMutex;
+extern std::recursive_mutex configMutex;
 extern SerialConnection* arduinoSerial;
 extern Kmbox_b_Connection* kmboxSerial;
 extern KmboxNetConnection* kmboxNetSerial;
