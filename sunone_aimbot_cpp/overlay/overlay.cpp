@@ -359,6 +359,13 @@ void OverlayThread()
                         ImGui::EndTabItem();
                     }
 
+                    if (ImGui::BeginTabItem("AI Tuning"))
+                    {
+                        draw_ai_tuning();
+
+                        ImGui::EndTabItem();
+                    }
+
                     if (ImGui::BeginTabItem("Buttons"))
                     {
                         draw_buttons();

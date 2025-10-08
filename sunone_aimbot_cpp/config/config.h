@@ -30,6 +30,8 @@ public:
     bool auto_aim;
 
     // Mouse
+    int dpi;
+    float sensitivity;
     int fovX;
     int fovY;
     float minSpeedMultiplier;
@@ -124,6 +126,19 @@ public:
     int class_smoke;                   // 8
     int class_fire;                    // 9
     int class_third_person;            // 10
+
+    // AI Tuning
+    bool ai_tuning_enabled;
+    std::string ai_aim_mode; // "aim_assist", "aim_bot", "rage_baiter"
+    float ai_learning_rate;
+    float ai_exploration_rate;
+    int ai_training_iterations;
+    float ai_target_radius;
+    bool ai_auto_calibrate;
+    float ai_sensitivity_min;
+    float ai_sensitivity_max;
+    int ai_dpi_min;
+    int ai_dpi_max;
 
     // Debug
     bool show_window;

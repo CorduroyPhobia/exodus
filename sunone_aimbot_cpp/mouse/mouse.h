@@ -137,6 +137,11 @@ public:
     void setKmboxConnection(Kmbox_b_Connection* newKmbox);
     void setKmboxNetConnection(KmboxNetConnection* newKmbox_net);
     void setGHubMouse(GhubMouse* newGHub);
+    
+    void applyAISettings(int dpi, float sensitivity, float minSpeed, float maxSpeed, 
+                        float prediction, float snapR, float nearR, float speedCurve,
+                        float snapBoost, bool windEnabled, float windG, float windW,
+                        float windM, float windD, bool easyRecoil, float recoilStrength);
 
     void setTargetDetected(bool detected) { target_detected.store(detected); }
     void setLastTargetTime(const std::chrono::steady_clock::time_point& t) { last_target_time = t; }

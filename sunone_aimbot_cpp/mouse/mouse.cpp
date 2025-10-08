@@ -608,3 +608,41 @@ void MouseThread::setGHubMouse(GhubMouse* newGHub)
     std::lock_guard<std::mutex> lock(input_method_mutex);
     gHub = newGHub;
 }
+
+void MouseThread::applyAISettings(int dpi, float sensitivity, float minSpeed, float maxSpeed, 
+                                 float prediction, float snapR, float nearR, float speedCurve,
+                                 float snapBoost, bool windEnabled, float windG, float windW,
+                                 float windM, float windD, bool easyRecoil, float recoilStrength)
+{
+    std::lock_guard<std::mutex> lock(input_method_mutex);
+    
+    // Update mouse settings
+    min_speed_multiplier = minSpeed;
+    max_speed_multiplier = maxSpeed;
+    prediction_interval = prediction;
+    
+    // Update wind mouse settings
+    wind_mouse_enabled = windEnabled;
+    wind_G = windG;
+    wind_W = windW;
+    wind_M = windM;
+    wind_D = windD;
+    
+    // Update config values for other parts of the system
+    config.minSpeedMultiplier = minSpeed;
+    config.maxSpeedMultiplier = maxSpeed;
+    config.predictionInterval = prediction;
+    config.snapRadius = snapR;
+    config.nearRadius = nearR;
+    config.speedCurveExponent = speedCurve;
+    config.snapBoostFactor = snapBoost;
+    config.wind_mouse_enabled = windEnabled;
+    config.wind_G = windG;
+    config.wind_W = windW;
+    config.wind_M = windM;
+    config.wind_D = windD;
+    config.easynorecoil = easyRecoil;
+    config.easynorecoilstrength = recoilStrength;
+    config.dpi = dpi;
+    config.sensitivity = sensitivity;
+}

@@ -67,6 +67,8 @@ bool Config::loadConfig(const std::string& filename)
         auto_aim = false;
 
         // Mouse
+        dpi = 800;
+        sensitivity = 1.0f;
         fovX = 106;
         fovY = 74;
         minSpeedMultiplier = 0.1f;
@@ -173,6 +175,19 @@ bool Config::loadConfig(const std::string& filename)
         class_smoke = 8;
         class_fire = 9;
         class_third_person = 10;
+
+        // AI Tuning
+        ai_tuning_enabled = false;
+        ai_aim_mode = "aim_assist";
+        ai_learning_rate = 0.01f;
+        ai_exploration_rate = 0.1f;
+        ai_training_iterations = 1000;
+        ai_target_radius = 10.0f;
+        ai_auto_calibrate = true;
+        ai_sensitivity_min = 0.1f;
+        ai_sensitivity_max = 5.0f;
+        ai_dpi_min = 400;
+        ai_dpi_max = 16000;
 
         // Debug
         show_window = true;
@@ -287,6 +302,8 @@ bool Config::loadConfig(const std::string& filename)
     auto_aim = get_bool("auto_aim", false);
 
     // Mouse
+    dpi = get_long("dpi", 800);
+    sensitivity = (float)get_double("sensitivity", 1.0);
     fovX = get_long("fovX", 106);
     fovY = get_long("fovY", 74);
     minSpeedMultiplier = (float)get_double("minSpeedMultiplier", 0.1);
@@ -400,6 +417,19 @@ bool Config::loadConfig(const std::string& filename)
     class_smoke = get_long("class_smoke", 8);
     class_fire = get_long("class_fire", 9);
     class_third_person = get_long("class_third_person", 10);
+
+    // AI Tuning
+    ai_tuning_enabled = get_bool("ai_tuning_enabled", false);
+    ai_aim_mode = get_string("ai_aim_mode", "aim_assist");
+    ai_learning_rate = (float)get_double("ai_learning_rate", 0.01);
+    ai_exploration_rate = (float)get_double("ai_exploration_rate", 0.1);
+    ai_training_iterations = get_long("ai_training_iterations", 1000);
+    ai_target_radius = (float)get_double("ai_target_radius", 10.0);
+    ai_auto_calibrate = get_bool("ai_auto_calibrate", true);
+    ai_sensitivity_min = (float)get_double("ai_sensitivity_min", 0.1);
+    ai_sensitivity_max = (float)get_double("ai_sensitivity_max", 5.0);
+    ai_dpi_min = get_long("ai_dpi_min", 400);
+    ai_dpi_max = get_long("ai_dpi_max", 16000);
 
     // Debug window
     show_window = get_bool("show_window", true);
