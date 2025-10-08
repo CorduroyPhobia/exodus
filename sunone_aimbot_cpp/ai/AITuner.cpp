@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <numeric>
+#include <random>
 
 AITuner::AITuner() 
     : currentMode(AimMode::AIM_ASSIST)
@@ -11,7 +12,7 @@ AITuner::AITuner()
     , maxIterations(1000)
     , targetRadius(10.0f)
     , autoCalibrate(true)
-    , rng(std::chrono::steady_clock::now().time_since_epoch().count())
+    , rng(std::random_device{}())
     , floatDist(0.0f, 1.0f)
     , intDist(400, 16000)
     , shouldStop(false)
@@ -138,22 +139,22 @@ void AITuner::stopCalibration() {
 }
 
 MouseSettings AITuner::getCurrentSettings() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     return state.currentSettings;
 }
 
 AimMode AITuner::getCurrentMode() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     return currentMode;
 }
 
 double AITuner::getCurrentReward() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     return state.currentReward;
 }
 
 int AITuner::getCurrentIteration() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     return state.iteration;
 }
 
@@ -162,17 +163,17 @@ bool AITuner::isTraining() const {
 }
 
 bool AITuner::isCalibrating() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     return state.isCalibrating;
 }
 
 double AITuner::getSuccessRate() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     return totalTargets > 0 ? (double)successfulTargets / totalTargets : 0.0;
 }
 
 MouseSettings AITuner::getBestSettings() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     
     if (rewardHistory.empty()) {
         return state.currentSettings;
@@ -189,7 +190,7 @@ MouseSettings AITuner::getBestSettings() const {
 }
 
 AITuner::TrainingStats AITuner::getTrainingStats() const {
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(stateMutex));
     
     TrainingStats stats;
     stats.currentIteration = state.iteration;
@@ -298,13 +299,9 @@ MouseSettings AITuner::mutateSettings(const MouseSettings& base) {
 }
 
 double AITuner::calculateReward(const AimbotTarget& target, double mouseX, double mouseY) {
-    if (!target.detected) {
-        return -1.0; // Penalty for no target
-    }
-    
     // Calculate distance from mouse to target center
-    double targetCenterX = target.x + target.width / 2.0;
-    double targetCenterY = target.y + target.height / 2.0;
+    double targetCenterX = target.x + target.w / 2.0;
+    double targetCenterY = target.y + target.h / 2.0;
     
     double distance = std::sqrt(std::pow(mouseX - targetCenterX, 2) + std::pow(mouseY - targetCenterY, 2));
     
