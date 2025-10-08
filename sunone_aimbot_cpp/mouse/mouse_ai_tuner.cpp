@@ -441,24 +441,101 @@ Config::MouseAIPreset MouseAITuner::midpointPreset(Mode mode) const
 {
     ModeLimits limits = limitsForMode(mode);
     Config::MouseAIPreset preset{};
-    preset.fovX = (limits.fovX.min + limits.fovX.max) / 2;
-    preset.fovY = (limits.fovY.min + limits.fovY.max) / 2;
-    preset.minSpeedMultiplier = static_cast<float>((limits.minSpeed.min + limits.minSpeed.max) * 0.5);
-    preset.maxSpeedMultiplier = static_cast<float>((limits.maxSpeed.min + limits.maxSpeed.max) * 0.5);
-    preset.predictionInterval = static_cast<float>((limits.predictionInterval.min + limits.predictionInterval.max) * 0.5);
-    preset.prediction_futurePositions = (limits.futurePositions.min + limits.futurePositions.max) / 2;
-    preset.draw_futurePositions = limits.preferDrawFuture;
-    preset.snapRadius = static_cast<float>((limits.snapRadius.min + limits.snapRadius.max) * 0.5);
-    preset.nearRadius = static_cast<float>((limits.nearRadius.min + limits.nearRadius.max) * 0.5);
-    preset.speedCurveExponent = static_cast<float>((limits.speedCurveExponent.min + limits.speedCurveExponent.max) * 0.5);
-    preset.snapBoostFactor = static_cast<float>((limits.snapBoostFactor.min + limits.snapBoostFactor.max) * 0.5);
-    preset.auto_shoot = limits.allowAutoShoot && limits.autoShootProbability > 0.5;
-    preset.bScope_multiplier = static_cast<float>((limits.bScopeMultiplier.min + limits.bScopeMultiplier.max) * 0.5);
-    preset.auto_shoot_fire_delay_ms = static_cast<float>((limits.fireDelay.min + limits.fireDelay.max) * 0.5);
-    preset.auto_shoot_press_duration_ms = static_cast<float>((limits.pressDuration.min + limits.pressDuration.max) * 0.5);
-    preset.auto_shoot_full_auto_grace_ms = static_cast<float>((limits.fullAutoGrace.min + limits.fullAutoGrace.max) * 0.5);
+
+    auto blendInt = [](const IntRange& range, double bias)
+    {
+        double t = std::clamp(bias, 0.0, 1.0);
+        double value = static_cast<double>(range.min) + (static_cast<double>(range.max) - static_cast<double>(range.min)) * t;
+        return static_cast<int>(std::round(value));
+    };
+
+    auto blendFloat = [](const ParameterRange& range, double bias)
+    {
+        double t = std::clamp(bias, 0.0, 1.0);
+        double value = range.min + (range.max - range.min) * t;
+        return static_cast<float>(value);
+    };
+
+    switch (mode)
+    {
+    case Mode::AimAssist:
+        preset.fovX = blendInt(limits.fovX, 0.35);
+        preset.fovY = blendInt(limits.fovY, 0.35);
+        preset.minSpeedMultiplier = blendFloat(limits.minSpeed, 0.20);
+        preset.maxSpeedMultiplier = blendFloat(limits.maxSpeed, 0.20);
+        preset.predictionInterval = blendFloat(limits.predictionInterval, 0.25);
+        preset.prediction_futurePositions = blendInt(limits.futurePositions, 0.30);
+        preset.draw_futurePositions = false;
+        preset.snapRadius = blendFloat(limits.snapRadius, 0.25f);
+        preset.nearRadius = blendFloat(limits.nearRadius, 0.25f);
+        preset.speedCurveExponent = blendFloat(limits.speedCurveExponent, 0.30f);
+        preset.snapBoostFactor = blendFloat(limits.snapBoostFactor, 0.20f);
+        preset.auto_shoot = false;
+        preset.bScope_multiplier = blendFloat(limits.bScopeMultiplier, 0.20f);
+        preset.auto_shoot_fire_delay_ms = blendFloat(limits.fireDelay, 0.60f);
+        preset.auto_shoot_press_duration_ms = blendFloat(limits.pressDuration, 0.50f);
+        preset.auto_shoot_full_auto_grace_ms = blendFloat(limits.fullAutoGrace, 0.50f);
+        break;
+    case Mode::AimBot:
+        preset.fovX = blendInt(limits.fovX, 0.35);
+        preset.fovY = blendInt(limits.fovY, 0.40);
+        preset.minSpeedMultiplier = blendFloat(limits.minSpeed, 0.25);
+        preset.maxSpeedMultiplier = blendFloat(limits.maxSpeed, 0.20);
+        preset.predictionInterval = blendFloat(limits.predictionInterval, 0.30);
+        preset.prediction_futurePositions = blendInt(limits.futurePositions, 0.35);
+        preset.draw_futurePositions = true;
+        preset.snapRadius = blendFloat(limits.snapRadius, 0.30f);
+        preset.nearRadius = blendFloat(limits.nearRadius, 0.35f);
+        preset.speedCurveExponent = blendFloat(limits.speedCurveExponent, 0.30f);
+        preset.snapBoostFactor = blendFloat(limits.snapBoostFactor, 0.30f);
+        preset.auto_shoot = limits.allowAutoShoot;
+        preset.bScope_multiplier = blendFloat(limits.bScopeMultiplier, 0.30f);
+        preset.auto_shoot_fire_delay_ms = blendFloat(limits.fireDelay, 0.40f);
+        preset.auto_shoot_press_duration_ms = blendFloat(limits.pressDuration, 0.35f);
+        preset.auto_shoot_full_auto_grace_ms = blendFloat(limits.fullAutoGrace, 0.45f);
+        break;
+    case Mode::RageBaiter:
+        preset.fovX = blendInt(limits.fovX, 0.35);
+        preset.fovY = blendInt(limits.fovY, 0.35);
+        preset.minSpeedMultiplier = blendFloat(limits.minSpeed, 0.30);
+        preset.maxSpeedMultiplier = blendFloat(limits.maxSpeed, 0.25);
+        preset.predictionInterval = blendFloat(limits.predictionInterval, 0.35);
+        preset.prediction_futurePositions = blendInt(limits.futurePositions, 0.35);
+        preset.draw_futurePositions = true;
+        preset.snapRadius = blendFloat(limits.snapRadius, 0.30f);
+        preset.nearRadius = blendFloat(limits.nearRadius, 0.35f);
+        preset.speedCurveExponent = blendFloat(limits.speedCurveExponent, 0.35f);
+        preset.snapBoostFactor = blendFloat(limits.snapBoostFactor, 0.40f);
+        preset.auto_shoot = limits.allowAutoShoot;
+        preset.bScope_multiplier = blendFloat(limits.bScopeMultiplier, 0.35f);
+        preset.auto_shoot_fire_delay_ms = blendFloat(limits.fireDelay, 0.35f);
+        preset.auto_shoot_press_duration_ms = blendFloat(limits.pressDuration, 0.35f);
+        preset.auto_shoot_full_auto_grace_ms = blendFloat(limits.fullAutoGrace, 0.40f);
+        break;
+    case Mode::Manual:
+    default:
+        preset.fovX = (limits.fovX.min + limits.fovX.max) / 2;
+        preset.fovY = (limits.fovY.min + limits.fovY.max) / 2;
+        preset.minSpeedMultiplier = static_cast<float>((limits.minSpeed.min + limits.minSpeed.max) * 0.5);
+        preset.maxSpeedMultiplier = static_cast<float>((limits.maxSpeed.min + limits.maxSpeed.max) * 0.5);
+        preset.predictionInterval = static_cast<float>((limits.predictionInterval.min + limits.predictionInterval.max) * 0.5);
+        preset.prediction_futurePositions = (limits.futurePositions.min + limits.futurePositions.max) / 2;
+        preset.draw_futurePositions = limits.preferDrawFuture;
+        preset.snapRadius = static_cast<float>((limits.snapRadius.min + limits.snapRadius.max) * 0.5);
+        preset.nearRadius = static_cast<float>((limits.nearRadius.min + limits.nearRadius.max) * 0.5);
+        preset.speedCurveExponent = static_cast<float>((limits.speedCurveExponent.min + limits.speedCurveExponent.max) * 0.5);
+        preset.snapBoostFactor = static_cast<float>((limits.snapBoostFactor.min + limits.snapBoostFactor.max) * 0.5);
+        preset.auto_shoot = limits.allowAutoShoot && limits.autoShootProbability > 0.5;
+        preset.bScope_multiplier = static_cast<float>((limits.bScopeMultiplier.min + limits.bScopeMultiplier.max) * 0.5);
+        preset.auto_shoot_fire_delay_ms = static_cast<float>((limits.fireDelay.min + limits.fireDelay.max) * 0.5);
+        preset.auto_shoot_press_duration_ms = static_cast<float>((limits.pressDuration.min + limits.pressDuration.max) * 0.5);
+        preset.auto_shoot_full_auto_grace_ms = static_cast<float>((limits.fullAutoGrace.min + limits.fullAutoGrace.max) * 0.5);
+        break;
+    }
+
     if (!limits.allowZeroHold && preset.auto_shoot_press_duration_ms < 10.0f)
         preset.auto_shoot_press_duration_ms = 10.0f;
+
     return clampPreset(preset, mode);
 }
 
