@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define _WINSOCKAPI_
 #include <windows.h>
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -133,6 +134,7 @@ bool Config::loadConfig(const std::string& filename)
 
         confidence_threshold = 0.10f;
         hip_aim_confidence_threshold = 0.25f;
+        hip_aim_min_box_area = 0.10f;
         nms_threshold = 0.50f;
         max_detections = 100;
 
@@ -373,6 +375,7 @@ bool Config::loadConfig(const std::string& filename)
 #endif
     confidence_threshold = (float)get_double("confidence_threshold", 0.15);
     hip_aim_confidence_threshold = (float)get_double("hip_aim_confidence_threshold", 0.30);
+    hip_aim_min_box_area = std::clamp((float)get_double("hip_aim_min_box_area", 0.10), 0.0f, 1.0f);
     nms_threshold = (float)get_double("nms_threshold", 0.50);
     max_detections = get_long("max_detections", 20);
 
@@ -548,6 +551,7 @@ bool Config::saveConfig(const std::string& filename)
         << std::fixed << std::setprecision(2)
         << "confidence_threshold = " << confidence_threshold << "\n"
         << "hip_aim_confidence_threshold = " << hip_aim_confidence_threshold << "\n"
+        << "hip_aim_min_box_area = " << hip_aim_min_box_area << "\n"
         << "nms_threshold = " << nms_threshold << "\n"
         << std::setprecision(0)
         << "max_detections = " << max_detections << "\n"

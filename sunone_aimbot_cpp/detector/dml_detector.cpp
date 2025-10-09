@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <dml_provider_factory.h>
 #include <wrl/client.h>
+#include <algorithm>
 #include <iostream>
 #include <thread>
 #include <atomic>
@@ -294,9 +295,35 @@ void DirectMLDetector::dmlInferenceThread()
             std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
             detectionBuffer.boxes.clear();
             detectionBuffer.classes.clear();
+
+            const bool hipActive = hipAiming.load(std::memory_order_relaxed);
+            const float minAreaFraction = hipActive
+                ? std::clamp(config.hip_aim_min_box_area, 0.0f, 1.0f)
+                : 0.0f;
+            const float frameArea = static_cast<float>(config.detection_resolution) *
+                                    static_cast<float>(config.detection_resolution);
+            const float minAreaPixels = (minAreaFraction <= 0.0f || frameArea <= 0.0f)
+                ? 0.0f
+                : frameArea * minAreaFraction;
+            const int maxKeep = std::max(1, config.max_detections);
+            int kept = 0;
+
             for (const auto& d : detections) {
+                if (hipActive && minAreaPixels > 0.0f) {
+                    const int width = std::max(d.box.width, 0);
+                    const int height = std::max(d.box.height, 0);
+                    const float area = static_cast<float>(width) * static_cast<float>(height);
+                    if (area < minAreaPixels) {
+                        continue;
+                    }
+                }
+
                 detectionBuffer.boxes.push_back(d.box);
                 detectionBuffer.classes.push_back(d.classId);
+                ++kept;
+                if (kept >= maxKeep) {
+                    break;
+                }
             }
             detectionBuffer.version++;
             detectionBuffer.cv.notify_all();

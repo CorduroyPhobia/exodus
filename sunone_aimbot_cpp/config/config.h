@@ -86,6 +86,7 @@ public:
     std::string ai_model;
     float confidence_threshold;
     float hip_aim_confidence_threshold;
+    float hip_aim_min_box_area;
     float nms_threshold;
     int max_detections;
     std::string postprocess;

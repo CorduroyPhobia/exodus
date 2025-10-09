@@ -18,6 +18,10 @@ constexpr float kMinFloatEpsilon = 1e-3f;
 constexpr std::size_t kMaxHistoryEntries = 256;
 constexpr double kRewardTolerance = 1e-4;
 constexpr char kPersistedStateFile[] = "config/ai_tuner_state.ini";
+constexpr float kBaseSmoothing = 0.25f;
+constexpr float kSmoothingScale = 0.5f;
+constexpr float kMinSmoothing = 0.10f;
+constexpr float kMaxSmoothing = 0.45f;
 
 int modeIndex(AimMode mode) {
     switch (mode) {
@@ -379,6 +383,8 @@ void AITuner::setSettingsBounds(const MouseSettings& min, const MouseSettings& m
     state.maxBounds = sanitizeSettings(maxBounds, state.minBounds, maxBounds);
     state.currentSettings = sanitizeSettings(state.currentSettings, state.minBounds, state.maxBounds);
     state.bestSettings = sanitizeSettings(state.bestSettings, state.minBounds, state.maxBounds);
+    state.appliedSettings = state.currentSettings;
+    state.hasAppliedSettings = true;
 
     for (auto& persisted : state.persistedStates) {
         if (persisted.hasData) {
@@ -727,6 +733,42 @@ MouseSettings AITuner::mutateSettings(const MouseSettings& base,
     return sanitizeSettings(candidate, minBounds, maxBounds);
 }
 
+MouseSettings AITuner::smoothSettings(const MouseSettings& from,
+                                     const MouseSettings& to,
+                                     float smoothing) const {
+    const float alpha = std::clamp(smoothing, 0.0f, 1.0f);
+    MouseSettings result;
+    auto lerp = [alpha](float a, float b) {
+        return a + (b - a) * alpha;
+    };
+
+    const float dpiFloat = static_cast<float>(from.dpi) +
+                           (static_cast<float>(to.dpi) - static_cast<float>(from.dpi)) * alpha;
+    result.dpi = static_cast<int>(std::lround(dpiFloat));
+    result.sensitivity = lerp(from.sensitivity, to.sensitivity);
+    result.minSpeedMultiplier = lerp(from.minSpeedMultiplier, to.minSpeedMultiplier);
+    result.maxSpeedMultiplier = lerp(from.maxSpeedMultiplier, to.maxSpeedMultiplier);
+    result.predictionInterval = lerp(from.predictionInterval, to.predictionInterval);
+    result.snapRadius = lerp(from.snapRadius, to.snapRadius);
+    result.nearRadius = lerp(from.nearRadius, to.nearRadius);
+    result.speedCurveExponent = lerp(from.speedCurveExponent, to.speedCurveExponent);
+    result.snapBoostFactor = lerp(from.snapBoostFactor, to.snapBoostFactor);
+    result.wind_mouse_enabled = (alpha >= 0.5f) ? to.wind_mouse_enabled : from.wind_mouse_enabled;
+    result.wind_G = lerp(from.wind_G, to.wind_G);
+    result.wind_W = lerp(from.wind_W, to.wind_W);
+    result.wind_M = lerp(from.wind_M, to.wind_M);
+    result.wind_D = lerp(from.wind_D, to.wind_D);
+    result.easynorecoil = (alpha >= 0.5f) ? to.easynorecoil : from.easynorecoil;
+    result.easynorecoilstrength = lerp(from.easynorecoilstrength, to.easynorecoilstrength);
+
+    return sanitizeSettings(result, state.minBounds, state.maxBounds);
+}
+
+float AITuner::currentSmoothingFactor() const {
+    const float candidate = kBaseSmoothing + static_cast<float>(config.learningRate) * kSmoothingScale;
+    return std::clamp(candidate, kMinSmoothing, kMaxSmoothing);
+}
+
 double AITuner::calculateReward(const AimbotTarget& target,
                                double mouseX,
                                double mouseY,
@@ -774,6 +816,8 @@ void AITuner::applyModeLocked(AimMode mode) {
     }
     state.currentSettings = defaults;
     state.bestSettings = defaults;
+    state.appliedSettings = defaults;
+    state.hasAppliedSettings = true;
     state.bestReward = std::numeric_limits<double>::lowest();
     state.calibrating = false;
     state.calibrationSchedule.clear();
@@ -801,10 +845,18 @@ void AITuner::resetStatisticsLocked() {
     state.calibrationSchedule.clear();
     state.currentSettings = sanitizeSettings(state.currentSettings, state.minBounds, state.maxBounds);
     state.bestSettings = sanitizeSettings(state.bestSettings, state.minBounds, state.maxBounds);
+    state.appliedSettings = state.currentSettings;
 }
 
 void AITuner::beginEvaluationLocked(const MouseSettings& candidate, bool clearAccum) {
-    state.currentSettings = sanitizeSettings(candidate, state.minBounds, state.maxBounds);
+    MouseSettings sanitized = sanitizeSettings(candidate, state.minBounds, state.maxBounds);
+    if (state.hasAppliedSettings) {
+        state.currentSettings = smoothSettings(state.appliedSettings, sanitized, currentSmoothingFactor());
+    } else {
+        state.currentSettings = sanitized;
+        state.hasAppliedSettings = true;
+    }
+    state.appliedSettings = state.currentSettings;
     state.settingsHistory.push_back(state.currentSettings);
     trimHistoryLocked();
     if (clearAccum) {
@@ -852,6 +904,7 @@ void AITuner::finalizeEvaluationLocked(double averageReward) {
     if (state.iteration >= state.totalIterations) {
         stopTrainingLocked();
         state.currentSettings = state.bestSettings;
+        state.appliedSettings = state.currentSettings;
         return;
     }
 
@@ -1166,11 +1219,15 @@ void AITuner::applyPersistedBestLocked() {
     if (!persisted.hasData) {
         state.currentSettings = sanitizeSettings(state.currentSettings, state.minBounds, state.maxBounds);
         state.bestSettings = sanitizeSettings(state.bestSettings, state.minBounds, state.maxBounds);
+        state.appliedSettings = state.currentSettings;
+        state.hasAppliedSettings = true;
         return;
     }
 
     state.bestSettings = sanitizeSettings(persisted.settings, state.minBounds, state.maxBounds);
     state.currentSettings = state.bestSettings;
+    state.appliedSettings = state.currentSettings;
+    state.hasAppliedSettings = true;
     state.bestReward = persisted.bestReward;
 }
 

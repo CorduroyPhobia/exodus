@@ -123,6 +123,8 @@ private:
         MouseSettings maxBounds{};
         MouseSettings currentSettings{};
         MouseSettings bestSettings{};
+        MouseSettings appliedSettings{};
+        bool hasAppliedSettings = false;
         std::vector<MouseSettings> calibrationSchedule;
         std::vector<MouseSettings> settingsHistory;
         std::vector<double> rewardHistory;
@@ -147,6 +149,10 @@ private:
                                  const MouseSettings& minBounds,
                                  const MouseSettings& maxBounds,
                                  float intensity);
+    MouseSettings smoothSettings(const MouseSettings& from,
+                                 const MouseSettings& to,
+                                 float smoothing) const;
+    float currentSmoothingFactor() const;
     double calculateReward(const AimbotTarget& target,
                            double mouseX,
                            double mouseY,
