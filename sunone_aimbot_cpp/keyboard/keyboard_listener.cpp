@@ -73,17 +73,29 @@ void keyboardListener()
     while (!shouldExit)
     {
         // Aiming
-        if (!config.auto_aim)
-        {
-            aiming = isAnyKeyPressed(config.button_targeting) ||
-                (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->aiming_active) ||
-                (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->aiming_active) ||
-                (kmboxNetSerial && kmboxNetSerial->isOpen() && kmboxNetSerial->aiming_active);
-        }
-        else
+        bool manualAimPressed = isAnyKeyPressed(config.button_targeting) ||
+            (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->aiming_active) ||
+            (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->aiming_active) ||
+            (kmboxNetSerial && kmboxNetSerial->isOpen() && kmboxNetSerial->aiming_active);
+
+        bool forcedAim = config.auto_aim;
+        bool hipAimActive = false;
+
+        if (forcedAim || manualAimPressed)
         {
             aiming = true;
         }
+        else if (config.auto_hip_aim)
+        {
+            hipAimActive = true;
+            aiming = true;
+        }
+        else
+        {
+            aiming = false;
+        }
+
+        hipAiming.store(hipAimActive, std::memory_order_relaxed);
 
         // Shooting
         shooting = isAnyKeyPressed(config.button_shoot) ||

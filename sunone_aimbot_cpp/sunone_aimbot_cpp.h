@@ -24,6 +24,7 @@ extern Kmbox_b_Connection* kmboxSerial;
 extern KmboxNetConnection* kmboxNetSerial;
 extern std::atomic<bool> input_method_changed;
 extern std::atomic<bool> aiming;
+extern std::atomic<bool> hipAiming;
 extern std::atomic<bool> shooting;
 extern std::atomic<bool> zooming;
 

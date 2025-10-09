@@ -22,6 +22,7 @@
 std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
 std::atomic<bool> aiming(false);
+std::atomic<bool> hipAiming(false);
 std::atomic<bool> detectionPaused(false);
 std::mutex configMutex;
 

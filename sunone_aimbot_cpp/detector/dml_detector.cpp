@@ -156,7 +156,9 @@ std::vector<std::vector<Detection>> DirectMLDetector::detectBatch(const std::vec
     const int num_classes = rows - 4;
 
     std::vector<std::vector<Detection>> batchDetections(batch_size);
-    float conf_thr = config.confidence_threshold;
+    float conf_thr = hipAiming.load(std::memory_order_relaxed)
+        ? config.hip_aim_confidence_threshold
+        : config.confidence_threshold;
     float nms_thr = config.nms_threshold;
 
     auto t4 = std::chrono::steady_clock::now();

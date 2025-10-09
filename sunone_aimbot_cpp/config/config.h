@@ -28,6 +28,7 @@ public:
     bool ignore_third_person;
     bool shooting_range_targets;
     bool auto_aim;
+    bool auto_hip_aim;
 
     // Mouse
     int dpi;
@@ -84,6 +85,7 @@ public:
     int dml_device_id;
     std::string ai_model;
     float confidence_threshold;
+    float hip_aim_confidence_threshold;
     float nms_threshold;
     int max_detections;
     std::string postprocess;

@@ -619,6 +619,10 @@ std::vector<std::vector<Detection>> TrtDetector::detectBatch(const std::vector<c
     int rows = static_cast<int>(shape[1]);
     int cols = static_cast<int>(shape[2]);
 
+    float confThreshold = hipAiming.load(std::memory_order_relaxed)
+        ? config.hip_aim_confidence_threshold
+        : config.confidence_threshold;
+
     for (int b = 0; b < batch_out; ++b)
     {
         const float* out_ptr = output.data() + b * rows * cols;
@@ -631,7 +635,7 @@ std::vector<std::vector<Detection>> TrtDetector::detectBatch(const std::vector<c
                 out_ptr,
                 shape,
                 numClasses,
-                config.confidence_threshold,
+                confThreshold,
                 config.nms_threshold,
                 &lastNmsTime
             );
@@ -648,7 +652,7 @@ std::vector<std::vector<Detection>> TrtDetector::detectBatch(const std::vector<c
                 out_ptr,
                 shape,
                 numClasses,
-                config.confidence_threshold,
+                confThreshold,
                 config.nms_threshold,
                 &lastNmsTime
             );
@@ -696,6 +700,10 @@ void TrtDetector::postProcess(const float* output, const std::string& outputName
 
     std::vector<Detection> detections;
 
+    float confThreshold = hipAiming.load(std::memory_order_relaxed)
+        ? config.hip_aim_confidence_threshold
+        : config.confidence_threshold;
+
     if (config.postprocess == "yolo10")
     {
         const std::vector<int64_t>& shape = outputShapes[outputName];
@@ -703,7 +711,7 @@ void TrtDetector::postProcess(const float* output, const std::string& outputName
             output,
             shape,
             numClasses,
-            config.confidence_threshold,
+            confThreshold,
             config.nms_threshold,
             nmsTime
         );
@@ -726,7 +734,7 @@ void TrtDetector::postProcess(const float* output, const std::string& outputName
             output,
             engineShape,
             numClasses,
-            config.confidence_threshold,
+            confThreshold,
             config.nms_threshold,
             nmsTime
         );

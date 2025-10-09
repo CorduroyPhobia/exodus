@@ -65,6 +65,7 @@ bool Config::loadConfig(const std::string& filename)
         ignore_third_person = false;
         shooting_range_targets = false;
         auto_aim = false;
+        auto_hip_aim = false;
 
         // Mouse
         dpi = 800;
@@ -131,6 +132,7 @@ bool Config::loadConfig(const std::string& filename)
 #endif
 
         confidence_threshold = 0.10f;
+        hip_aim_confidence_threshold = 0.25f;
         nms_threshold = 0.50f;
         max_detections = 100;
 
@@ -300,6 +302,7 @@ bool Config::loadConfig(const std::string& filename)
     ignore_third_person = get_bool("ignore_third_person", false);
     shooting_range_targets = get_bool("shooting_range_targets", false);
     auto_aim = get_bool("auto_aim", false);
+    auto_hip_aim = get_bool("auto_hip_aim", false);
 
     // Mouse
     dpi = get_long("dpi", 800);
@@ -369,6 +372,7 @@ bool Config::loadConfig(const std::string& filename)
     ai_model = get_string("ai_model", "sunxds_0.5.6.onnx");
 #endif
     confidence_threshold = (float)get_double("confidence_threshold", 0.15);
+    hip_aim_confidence_threshold = (float)get_double("hip_aim_confidence_threshold", 0.30);
     nms_threshold = (float)get_double("nms_threshold", 0.50);
     max_detections = get_long("max_detections", 20);
 
@@ -473,7 +477,8 @@ bool Config::saveConfig(const std::string& filename)
         << "head_y_offset = " << head_y_offset << "\n"
         << "ignore_third_person = " << (ignore_third_person ? "true" : "false") << "\n"
         << "shooting_range_targets = " << (shooting_range_targets ? "true" : "false") << "\n"
-        << "auto_aim = " << (auto_aim ? "true" : "false") << "\n\n";
+        << "auto_aim = " << (auto_aim ? "true" : "false") << "\n"
+        << "auto_hip_aim = " << (auto_hip_aim ? "true" : "false") << "\n\n";
 
     // Mouse
     file << "# Mouse move\n"
@@ -542,6 +547,7 @@ bool Config::saveConfig(const std::string& filename)
         << "ai_model = " << ai_model << "\n"
         << std::fixed << std::setprecision(2)
         << "confidence_threshold = " << confidence_threshold << "\n"
+        << "hip_aim_confidence_threshold = " << hip_aim_confidence_threshold << "\n"
         << "nms_threshold = " << nms_threshold << "\n"
         << std::setprecision(0)
         << "max_detections = " << max_detections << "\n"
