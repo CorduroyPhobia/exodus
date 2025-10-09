@@ -22,6 +22,7 @@ std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
 std::atomic<bool> aiming(false);
 std::atomic<bool> hipAiming(false);
+std::atomic<bool> overlayVisible(false);
 std::atomic<bool> detectionPaused(false);
 std::mutex configMutex;
 
@@ -99,6 +100,14 @@ void mouseThreadFunction(MouseThread& mouseThread)
                 );
             }
             detection_resolution_changed.store(false);
+        }
+
+        if (config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed))
+        {
+            mouseThread.clearFuturePositions();
+            mouseThread.setTargetDetected(false);
+            mouseThread.releaseMouse();
+            continue;
         }
 
         AimbotTarget* target = sortTargets(

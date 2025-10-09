@@ -23,6 +23,7 @@
 
 int prev_screenshot_delay = config.screenshot_delay;
 bool prev_verbose = config.verbose;
+bool prev_pause_when_overlay_open = config.pause_when_overlay_open;
 
 static ID3D11Texture2D* g_debugTex = nullptr;
 static ID3D11ShaderResourceView* g_debugSRV = nullptr;
@@ -159,6 +160,7 @@ void draw_debug_frame()
 void draw_debug()
 {
     ImGui::Checkbox("Show Debug Window", &config.show_window);
+    ImGui::Checkbox("Pause while overlay is open", &config.pause_when_overlay_open);
     if (config.show_window)
     {
         draw_debug_frame();
@@ -238,10 +240,12 @@ void draw_debug()
     }
 
     if (prev_screenshot_delay != config.screenshot_delay ||
-        prev_verbose != config.verbose)
+        prev_verbose != config.verbose ||
+        prev_pause_when_overlay_open != config.pause_when_overlay_open)
     {
         prev_screenshot_delay = config.screenshot_delay;
         prev_verbose = config.verbose;
+        prev_pause_when_overlay_open = config.pause_when_overlay_open;
         config.saveConfig();
     }
 }

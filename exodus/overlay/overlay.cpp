@@ -178,6 +178,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_DESTROY:
+        overlayVisible.store(false, std::memory_order_relaxed);
         shouldExit = true;
         ::PostQuitMessage(0);
         return 0;
@@ -292,11 +293,25 @@ void OverlayThread()
         if (isAnyKeyPressed(config.button_open_overlay) & 0x1)
         {
             show_overlay = !show_overlay;
+            overlayVisible.store(show_overlay, std::memory_order_relaxed);
 
             if (show_overlay)
             {
                 ShowWindow(g_hwnd, SW_SHOW);
                 SetForegroundWindow(g_hwnd);
+                if (config.pause_when_overlay_open)
+                {
+                    aiming.store(false, std::memory_order_relaxed);
+                    hipAiming.store(false, std::memory_order_relaxed);
+                    shooting.store(false, std::memory_order_relaxed);
+                    zooming.store(false, std::memory_order_relaxed);
+                    if (globalMouseThread)
+                    {
+                        globalMouseThread->releaseMouse();
+                        globalMouseThread->clearFuturePositions();
+                        globalMouseThread->setTargetDetected(false);
+                    }
+                }
             }
             else
             {

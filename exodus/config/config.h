@@ -105,6 +105,7 @@ public:
     // Overlay
     int overlay_opacity;
     float overlay_ui_scale;
+    bool pause_when_overlay_open;
 
     // Custom Classes
     int class_player;                  // 0

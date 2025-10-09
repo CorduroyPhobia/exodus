@@ -4,6 +4,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <opencv2/opencv.hpp>
@@ -44,7 +45,9 @@ AimbotTarget* sortTargets(
         return std::clamp(adjusted, 0.0, 2.0);
     };
 
-    if (!disableHeadshot)
+    const bool headshotsAllowed = !disableHeadshot && !hipAiming.load(std::memory_order_relaxed);
+
+    if (headshotsAllowed)
     {
         for (size_t i = 0; i < boxes.size(); i++)
         {
@@ -64,12 +67,12 @@ AimbotTarget* sortTargets(
         }
     }
 
-    if (disableHeadshot || nearestIdx == -1)
+    if (!headshotsAllowed || nearestIdx == -1)
     {
         minDistance = std::numeric_limits<double>::max();
         for (size_t i = 0; i < boxes.size(); i++)
         {
-            if (disableHeadshot && classes[i] == config.class_head)
+            if (!headshotsAllowed && classes[i] == config.class_head)
                 continue;
 
             if (classes[i] == config.class_player ||
@@ -98,7 +101,7 @@ AimbotTarget* sortTargets(
     }
 
     int finalY = 0;
-    if (classes[nearestIdx] == config.class_head)
+    if (classes[nearestIdx] == config.class_head && headshotsAllowed)
     {
         double offsetFactor = computeOffsetFactor(boxes[nearestIdx], config.head_y_offset, config.head_distance_compensation);
         int headOffsetY = static_cast<int>(boxes[nearestIdx].height * offsetFactor);

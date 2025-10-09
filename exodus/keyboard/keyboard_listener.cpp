@@ -61,12 +61,18 @@ void keyboardListener()
     while (!shouldExit)
     {
         // Aiming
-        bool manualAimPressed = isAnyKeyPressed(config.button_targeting);
+        const bool overlayBlock = config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed);
 
-        bool forcedAim = config.auto_aim;
+        bool manualAimPressed = !overlayBlock && isAnyKeyPressed(config.button_targeting);
+
+        bool forcedAim = !overlayBlock && config.auto_aim;
         bool hipAimActive = false;
 
-        if (forcedAim || manualAimPressed)
+        if (overlayBlock)
+        {
+            aiming = false;
+        }
+        else if (forcedAim || manualAimPressed)
         {
             aiming = true;
         }
@@ -83,10 +89,10 @@ void keyboardListener()
         hipAiming.store(hipAimActive, std::memory_order_relaxed);
 
         // Shooting
-        shooting = isAnyKeyPressed(config.button_shoot);
+        shooting = overlayBlock ? false : isAnyKeyPressed(config.button_shoot);
 
         // Zooming
-        zooming = isAnyKeyPressed(config.button_zoom);
+        zooming = overlayBlock ? false : isAnyKeyPressed(config.button_zoom);
 
         // Exit
         if (isAnyKeyPressed(config.button_exit))
@@ -150,7 +156,7 @@ void keyboardListener()
         bool shiftKey = isAnyKeyPressed(shiftKeys);
 
         // Adjust offsets based on arrow keys and shift combination
-        if (config.enable_arrows_settings)
+        if (config.enable_arrows_settings && !overlayBlock)
         {
             if (upArrow && !prevUpArrow)
             {

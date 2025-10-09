@@ -226,7 +226,7 @@ int DirectMLDetector::getNumberOfClasses()
 
 void DirectMLDetector::processFrame(const cv::Mat& frame)
 {
-    if (detectionPaused)
+    if ((config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed)) || detectionPaused)
     {
         std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
         detectionBuffer.boxes.clear();
@@ -253,7 +253,7 @@ void DirectMLDetector::dmlInferenceThread()
             std::cout << "[DML] Detector reloaded: " << config.ai_model << std::endl;
         }
 
-        if (detectionPaused)
+        if ((config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed)) || detectionPaused)
         {
             std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
             detectionBuffer.boxes.clear();

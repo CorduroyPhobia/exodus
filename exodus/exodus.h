@@ -18,6 +18,7 @@ extern DetectionBuffer detectionBuffer;
 extern MouseThread* globalMouseThread;
 extern std::atomic<bool> aiming;
 extern std::atomic<bool> hipAiming;
+extern std::atomic<bool> overlayVisible;
 extern std::atomic<bool> shooting;
 extern std::atomic<bool> zooming;
 

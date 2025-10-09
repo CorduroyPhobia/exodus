@@ -165,7 +165,8 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
     file << "# Overlay\n"
         << "overlay_opacity = " << cfg.overlay_opacity << "\n"
         << std::fixed << std::setprecision(2)
-        << "overlay_ui_scale = " << cfg.overlay_ui_scale << "\n\n";
+        << "overlay_ui_scale = " << cfg.overlay_ui_scale << "\n"
+        << "pause_when_overlay_open = " << (cfg.pause_when_overlay_open ? "true" : "false") << "\n\n";
 
     // Custom Classes
     file << "# Custom Classes\n"
@@ -301,6 +302,7 @@ bool Config::loadConfig(const std::string& filename)
         // Overlay
         overlay_opacity = 225;
         overlay_ui_scale = 1.0f;
+        pause_when_overlay_open = true;
 
         // Custom classes
         class_player = 0;
@@ -592,6 +594,7 @@ bool Config::loadConfig(const std::string& filename)
     // Overlay
     overlay_opacity = get_long("overlay_opacity", 225);
     overlay_ui_scale = (float)get_double("overlay_ui_scale", 1.0);
+    pause_when_overlay_open = get_bool("pause_when_overlay_open", true);
 
     // Custom Classes
     class_player = get_long("class_player", 0);
