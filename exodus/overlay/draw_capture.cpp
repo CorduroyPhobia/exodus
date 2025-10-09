@@ -54,6 +54,7 @@ void draw_capture_settings()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,

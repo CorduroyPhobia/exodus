@@ -202,6 +202,7 @@ static void applyPresetSideEffects(const Config& previous)
         previous.speedCurveExponent != config.speedCurveExponent ||
         previous.snapBoostFactor != config.snapBoostFactor ||
         previous.auto_shoot != config.auto_shoot ||
+        previous.auto_shoot_hold_until_off_target != config.auto_shoot_hold_until_off_target ||
         previous.bScope_multiplier != config.bScope_multiplier ||
         previous.auto_shoot_fire_delay_ms != config.auto_shoot_fire_delay_ms ||
         previous.auto_shoot_press_duration_ms != config.auto_shoot_press_duration_ms ||
@@ -225,6 +226,7 @@ static void applyPresetSideEffects(const Config& previous)
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
