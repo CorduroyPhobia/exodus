@@ -61,7 +61,7 @@ void keyboardListener()
     while (!shouldExit)
     {
         // Aiming
-        const bool overlayBlock = config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed);
+        const bool overlayBlock = config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire);
 
         bool manualAimPressed = !overlayBlock && isAnyKeyPressed(config.button_targeting);
 

@@ -410,7 +410,7 @@ void TrtDetector::processFrame(const cv::Mat& frame)
 {
     if (config.backend == "DML") return;
 
-    if ((config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed)) || detectionPaused)
+    if ((config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire)) || detectionPaused)
     {
         std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
         detectionBuffer.boxes.clear();
@@ -448,7 +448,7 @@ void TrtDetector::inferenceThread()
             detector_model_changed.store(false);
         }
 
-        if (config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed))
+        if (config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire))
         {
             std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
             detectionBuffer.boxes.clear();

@@ -178,7 +178,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_DESTROY:
-        overlayVisible.store(false, std::memory_order_relaxed);
+        overlayVisible.store(false, std::memory_order_release);
         shouldExit = true;
         ::PostQuitMessage(0);
         return 0;
@@ -259,6 +259,7 @@ void OverlayThread()
     SetupImGui();
 
     bool show_overlay = false;
+    bool prev_show_overlay = false;
     int prev_opacity = config.overlay_opacity;
 
     for (const auto& pair : KeyCodes::key_code_map)
@@ -293,7 +294,12 @@ void OverlayThread()
         if (isAnyKeyPressed(config.button_open_overlay) & 0x1)
         {
             show_overlay = !show_overlay;
-            overlayVisible.store(show_overlay, std::memory_order_relaxed);
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+
+        if (show_overlay != prev_show_overlay)
+        {
+            overlayVisible.store(show_overlay, std::memory_order_release);
 
             if (show_overlay)
             {
@@ -318,7 +324,7 @@ void OverlayThread()
                 ShowWindow(g_hwnd, SW_HIDE);
             }
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            prev_show_overlay = show_overlay;
         }
 
         if (show_overlay)

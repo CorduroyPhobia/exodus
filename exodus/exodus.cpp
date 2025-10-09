@@ -135,7 +135,7 @@ void mouseThreadFunction(MouseThread& mouseThread)
             detection_resolution_changed.store(false);
         }
 
-        if (config.pause_when_overlay_open && overlayVisible.load(std::memory_order_relaxed))
+        if (config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire))
         {
             mouseThread.clearFuturePositions();
             mouseThread.setTargetDetected(false);
