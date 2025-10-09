@@ -4,9 +4,7 @@
     <ClCompile Include="scr\other_tools.cpp" />
     <ClCompile Include="capture\capture.cpp" />
     <ClCompile Include="overlay\overlay.cpp" />
-    <ClCompile Include="mouse\ghub.cpp" />
     <ClCompile Include="mouse\mouse.cpp" />
-    <ClCompile Include="mouse\SerialConnection.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
     <ClCompile Include="detector\trt_detector.cpp" />
     <ClCompile Include="tensorrt\nvinf.cpp" />
@@ -31,13 +29,10 @@
     <ClCompile Include="overlay\draw_buttons.cpp" />
     <ClCompile Include="overlay\draw_overlay.cpp" />
     <ClCompile Include="overlay\draw_debug.cpp" />
-    <ClCompile Include="mouse\Kmbox_b.cpp" />
     <ClCompile Include="detector\dml_detector.cpp" />
     <ClCompile Include="overlay\draw_stats.cpp" />
     <ClCompile Include="capture\capture_utils.cpp" />
     <ClCompile Include="detector\detection_buffer.cpp" />
-    <ClCompile Include="mouse\kmbox_net\kmboxNet.cpp" />
-    <ClCompile Include="mouse\kmboxNetConnection.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="scr">
@@ -52,9 +47,7 @@
     <ClInclude Include="include\memory_images.h" />
     <ClInclude Include="capture\capture.h" />
     <ClInclude Include="overlay\overlay.h" />
-    <ClInclude Include="mouse\ghub.h" />
     <ClInclude Include="mouse\mouse.h" />
-    <ClInclude Include="mouse\SerialConnection.h" />
     <ClInclude Include="mouse\AimbotTarget.h" />
     <ClInclude Include="detector\trt_detector.h" />
     <ClInclude Include="tensorrt\nvinf.h" />
@@ -75,15 +68,10 @@
     <ClInclude Include="capture\virtual_camera.h" />
     <ClInclude Include="sunone_aimbot_cpp.h" />
     <ClInclude Include="overlay\draw_settings.h" />
-    <ClInclude Include="mouse\Kmbox_b.h" />
     <ClInclude Include="detector\dml_detector.h" />
     <ClInclude Include="tensorrt\trt_monitor.h" />
     <ClInclude Include="capture\capture_utils.h" />
     <ClInclude Include="detector\detection_buffer.h" />
-    <ClInclude Include="mouse\kmbox_net\HidTable.h" />
-    <ClInclude Include="mouse\kmbox_net\kmboxNet.h" />
-    <ClInclude Include="mouse\kmbox_net\picture.h" />
-    <ClInclude Include="mouse\kmboxNetConnection.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -91,7 +91,6 @@ bool Config::loadConfig(const std::string& filename)
 
         easynorecoil = false;
         easynorecoilstrength = 0.0f;
-        input_method = "WIN32";
 
         // Wind mouse
         wind_mouse_enabled = true;
@@ -99,21 +98,6 @@ bool Config::loadConfig(const std::string& filename)
         wind_W = 5.0f;
         wind_M = 5.0f;
         wind_D = 3.0f;
-
-        // Arduino
-        arduino_baudrate = 115200;
-        arduino_port = "COM0";
-        arduino_16_bit_mouse = false;
-        arduino_enable_keys = false;
-
-        // kmbox_B
-        kmbox_b_baudrate = 115200;
-        kmbox_b_port = "COM0";
-
-        // kmbox_net
-        kmbox_net_ip = "10.42.42.42";
-        kmbox_net_port = "1984";
-        kmbox_net_uuid = "DEADC0DE";
 
         // Mouse shooting
         auto_shoot = false;
@@ -389,7 +373,6 @@ bool Config::loadConfig(const std::string& filename)
 
     easynorecoil = get_bool("easynorecoil", false);
     easynorecoilstrength = (float)get_double("easynorecoilstrength", 0.0);
-    input_method = get_string("input_method", "WIN32");
 
     // Wind mouse
     wind_mouse_enabled = get_bool("wind_mouse_enabled", true);
@@ -397,21 +380,6 @@ bool Config::loadConfig(const std::string& filename)
     wind_W = (float)get_double("wind_W", 5.0f);
     wind_M = (float)get_double("wind_M", 5.0f);
     wind_D = (float)get_double("wind_D", 3.0f);
-
-    // Arduino
-    arduino_baudrate = get_long("arduino_baudrate", 115200);
-    arduino_port = get_string("arduino_port", "COM0");
-    arduino_16_bit_mouse = get_bool("arduino_16_bit_mouse", false);
-    arduino_enable_keys = get_bool("arduino_enable_keys", false);
-
-    // kmbox_B
-    kmbox_b_baudrate = get_long("kmbox_baudrate", 115200);
-    kmbox_b_port = get_string("kmbox_port", "COM0");
-
-    // kmbox_net
-    kmbox_net_ip = get_string("kmbox_net_ip", "10.42.42.42");
-    kmbox_net_port = get_string("kmbox_net_port", "1984");
-    kmbox_net_uuid = get_string("kmbox_net_uuid", "DEADC0DE");
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
@@ -549,10 +517,7 @@ bool Config::saveConfig(const std::string& filename)
 
         << "easynorecoil = " << (easynorecoil ? "true" : "false") << "\n"
         << std::fixed << std::setprecision(1)
-        << "easynorecoilstrength = " << easynorecoilstrength << "\n"
-
-        << "# WIN32, GHUB, ARDUINO, KMBOX_B, KMBOX_NET\n"
-        << "input_method = " << input_method << "\n\n";
+        << "easynorecoilstrength = " << easynorecoilstrength << "\n\n";
 
     // Wind mouse
     file << "# Wind mouse\n"
@@ -561,24 +526,6 @@ bool Config::saveConfig(const std::string& filename)
         << "wind_W = " << wind_W << "\n"
         << "wind_M = " << wind_M << "\n"
         << "wind_D = " << wind_D << "\n\n";
-
-    // Arduino
-    file << "# Arduino\n"
-        << "arduino_baudrate = " << arduino_baudrate << "\n"
-        << "arduino_port = " << arduino_port << "\n"
-        << "arduino_16_bit_mouse = " << (arduino_16_bit_mouse ? "true" : "false") << "\n"
-        << "arduino_enable_keys = " << (arduino_enable_keys ? "true" : "false") << "\n\n";
-
-    // kmbox_B
-    file << "# Kmbox_B\n"
-        << "kmbox_baudrate = " << kmbox_b_baudrate << "\n"
-        << "kmbox_port = " << kmbox_b_port << "\n\n";
-
-    // kmbox_net
-    file << "# Kmbox_net\n"
-        << "kmbox_net_ip = " << kmbox_net_ip << "\n"
-        << "kmbox_net_port = " << kmbox_net_port << "\n"
-        << "kmbox_net_uuid = " << kmbox_net_uuid << "\n\n";
 
     // Mouse shooting
     file << "# Mouse shooting\n"

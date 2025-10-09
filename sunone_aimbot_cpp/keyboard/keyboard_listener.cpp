@@ -9,13 +9,11 @@
 #include <iostream>
 
 #include "config.h"
-#include "SerialConnection.h"
 #include "keyboard_listener.h"
 #include "mouse.h"
 #include "keycodes.h"
 #include "sunone_aimbot_cpp.h"
 #include "capture.h"
-#include "KmboxNetConnection.h"
 
 extern std::atomic<bool> shouldExit;
 extern std::atomic<bool> aiming;
@@ -49,16 +47,6 @@ bool isAnyKeyPressed(const std::vector<std::string>& keys)
 
         bool pressed = false;
 
-        // kmbox net
-        if (kmboxNetSerial && kmboxNetSerial->isOpen())
-        {
-            if  (key_name == "LeftMouseButton")      pressed = kmboxNetSerial->monitorMouseLeft()   == 1;
-            else if(key_name == "RightMouseButton")  pressed = kmboxNetSerial->monitorMouseRight()  == 1;
-            else if(key_name == "MiddleMouseButton") pressed = kmboxNetSerial->monitorMouseMiddle() == 1;
-            else if(key_name == "X1MouseButton")     pressed = kmboxNetSerial->monitorMouseSide1()  == 1;
-            else if(key_name == "X2MouseButton")     pressed = kmboxNetSerial->monitorMouseSide2()  == 1;
-        }
-
         // local mouse
         if (!pressed && key_code != -1 && (GetAsyncKeyState(key_code) & 0x8000))
             pressed = true;
@@ -73,10 +61,7 @@ void keyboardListener()
     while (!shouldExit)
     {
         // Aiming
-        bool manualAimPressed = isAnyKeyPressed(config.button_targeting) ||
-            (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->aiming_active) ||
-            (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->aiming_active) ||
-            (kmboxNetSerial && kmboxNetSerial->isOpen() && kmboxNetSerial->aiming_active);
+        bool manualAimPressed = isAnyKeyPressed(config.button_targeting);
 
         bool forcedAim = config.auto_aim;
         bool hipAimActive = false;
@@ -98,15 +83,10 @@ void keyboardListener()
         hipAiming.store(hipAimActive, std::memory_order_relaxed);
 
         // Shooting
-        shooting = isAnyKeyPressed(config.button_shoot) ||
-            (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->shooting_active) ||
-            (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->shooting_active) ||
-            (kmboxNetSerial && kmboxNetSerial->isOpen() && kmboxNetSerial->shooting_active);
+        shooting = isAnyKeyPressed(config.button_shoot);
 
         // Zooming
-        zooming = isAnyKeyPressed(config.button_zoom) ||
-            (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->zooming_active) ||
-            (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->zooming_active);
+        zooming = isAnyKeyPressed(config.button_zoom);
 
         // Exit
         if (isAnyKeyPressed(config.button_exit))

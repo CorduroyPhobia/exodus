@@ -16,11 +16,6 @@
 #include <condition_variable>
 
 #include "AimbotTarget.h"
-#include "SerialConnection.h"
-#include "Kmbox_b.h"
-#include "KmboxNetConnection.h"
-#include "ghub.h"
-
 class MouseThread
 {
 private:
@@ -49,11 +44,6 @@ private:
     std::chrono::steady_clock::time_point last_in_scope_time;
     std::atomic<bool> target_detected{ false };
     std::atomic<bool> mouse_pressed{ false };
-
-    SerialConnection* serial;
-    Kmbox_b_Connection* kmbox;
-    KmboxNetConnection* kmbox_net;
-    GhubMouse* gHub;
 
     void sendMovementToDriver(int dx, int dy);
 
@@ -96,11 +86,7 @@ public:
         float bScope_multiplier,
         double auto_shoot_fire_delay_ms,
         double auto_shoot_press_duration_ms,
-        double auto_shoot_full_auto_grace_ms,
-        SerialConnection* serialConnection = nullptr,
-        GhubMouse* gHubMouse = nullptr,
-        Kmbox_b_Connection* kmboxConnection = nullptr,
-        KmboxNetConnection* Kmbox_Net_Connection = nullptr
+        double auto_shoot_full_auto_grace_ms
     );
     ~MouseThread();
 
@@ -133,11 +119,6 @@ public:
     void clearFuturePositions();
     std::vector<std::pair<double, double>> getFuturePositions();
 
-    void setSerialConnection(SerialConnection* newSerial);
-    void setKmboxConnection(Kmbox_b_Connection* newKmbox);
-    void setKmboxNetConnection(KmboxNetConnection* newKmbox_net);
-    void setGHubMouse(GhubMouse* newGHub);
-    
     void setTargetDetected(bool detected) { target_detected.store(detected); }
     void setLastTargetTime(const std::chrono::steady_clock::time_point& t) { last_target_time = t; }
 };

@@ -12,9 +12,7 @@
 
 #include "mouse.h"
 #include "capture.h"
-#include "SerialConnection.h"
 #include "sunone_aimbot_cpp.h"
-#include "ghub.h"
 
 MouseThread::MouseThread(
     int resolution,
@@ -27,11 +25,7 @@ MouseThread::MouseThread(
     float bScope_multiplier,
     double auto_shoot_fire_delay_ms,
     double auto_shoot_press_duration_ms,
-    double auto_shoot_full_auto_grace_ms,
-    SerialConnection* serialConnection,
-    GhubMouse* gHubMouse,
-    Kmbox_b_Connection* kmboxConnection,
-    KmboxNetConnection* Kmbox_Net_Connection)
+    double auto_shoot_full_auto_grace_ms)
     : screen_width(resolution),
     screen_height(resolution),
     prediction_interval(predictionInterval),
@@ -47,10 +41,6 @@ MouseThread::MouseThread(
     auto_shoot_fire_delay_ms(std::max(0.0, auto_shoot_fire_delay_ms)),
     auto_shoot_press_duration_ms(std::max(0.0, auto_shoot_press_duration_ms)),
     auto_shoot_full_auto_grace_ms(std::max(0.0, auto_shoot_full_auto_grace_ms)),
-    serial(serialConnection),
-    kmbox(kmboxConnection),
-    kmbox_net(Kmbox_Net_Connection),
-    gHub(gHubMouse),
 
     prev_velocity_x(0.0),
     prev_velocity_y(0.0),
@@ -199,56 +189,18 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
 
 void MouseThread::sendMousePress()
 {
-    if (kmbox)
-    {
-        kmbox->press(0);
-    }
-    else if (kmbox_net)
-    {
-        kmbox_net->keyDown(0);
-    }
-    else if (serial)
-    {
-        serial->press();
-    }
-    else if (gHub)
-    {
-        gHub->mouse_down();
-    }
-    else
-    {
-        INPUT input = { 0 };
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-        SendInput(1, &input, sizeof(INPUT));
-    }
+    INPUT input = { 0 };
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    SendInput(1, &input, sizeof(INPUT));
 }
 
 void MouseThread::sendMouseRelease()
 {
-    if (kmbox)
-    {
-        kmbox->release(0);
-    }
-    else if (kmbox_net)
-    {
-        kmbox_net->keyUp(0);
-    }
-    else if (serial)
-    {
-        serial->release();
-    }
-    else if (gHub)
-    {
-        gHub->mouse_up();
-    }
-    else
-    {
-        INPUT input = { 0 };
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-        SendInput(1, &input, sizeof(INPUT));
-    }
+    INPUT input = { 0 };
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    SendInput(1, &input, sizeof(INPUT));
 }
 
 std::pair<double, double> MouseThread::predict_target_position(double target_x, double target_y)
@@ -309,30 +261,11 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
 
     std::lock_guard<std::mutex> lock(input_method_mutex);
 
-    if (kmbox)
-    {
-        kmbox->move(dx, dy);
-    }
-    else if (kmbox_net)
-    {
-        kmbox_net->move(dx, dy);
-    }
-    else if (serial)
-    {
-        serial->move(dx, dy);
-    }
-    else if (gHub)
-    {
-        gHub->mouse_xy(dx, dy);
-    }
-    else
-    {
-        INPUT in{ 0 };
-        in.type = INPUT_MOUSE;
-        in.mi.dx = dx;  in.mi.dy = dy;
-        in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
-        SendInput(1, &in, sizeof(INPUT));
-    }
+    INPUT in{ 0 };
+    in.type = INPUT_MOUSE;
+    in.mi.dx = dx;  in.mi.dy = dy;
+    in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
+    SendInput(1, &in, sizeof(INPUT));
 }
 
 std::pair<double, double> MouseThread::calc_movement(double tx, double ty)
@@ -585,26 +518,3 @@ std::vector<std::pair<double, double>> MouseThread::getFuturePositions()
     return futurePositions;
 }
 
-void MouseThread::setSerialConnection(SerialConnection* newSerial)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    serial = newSerial;
-}
-
-void MouseThread::setKmboxConnection(Kmbox_b_Connection* newKmbox)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    kmbox = newKmbox;
-}
-
-void MouseThread::setKmboxNetConnection(KmboxNetConnection* newKmbox_net)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    kmbox_net = newKmbox_net;
-}
-
-void MouseThread::setGHubMouse(GhubMouse* newGHub)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    gHub = newGHub;
-}

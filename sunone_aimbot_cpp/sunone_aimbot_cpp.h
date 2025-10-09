@@ -7,10 +7,7 @@
 #endif
 #include "dml_detector.h"
 #include "mouse.h"
-#include "SerialConnection.h"
 #include "detection_buffer.h"
-#include "Kmbox_b.h"
-#include "KmboxNetConnection.h"
 
 extern Config config;
 #ifdef USE_CUDA
@@ -19,10 +16,6 @@ extern TrtDetector trt_detector;
 extern DirectMLDetector* dml_detector;
 extern DetectionBuffer detectionBuffer;
 extern MouseThread* globalMouseThread;
-extern SerialConnection* arduinoSerial;
-extern Kmbox_b_Connection* kmboxSerial;
-extern KmboxNetConnection* kmboxNetSerial;
-extern std::atomic<bool> input_method_changed;
 extern std::atomic<bool> aiming;
 extern std::atomic<bool> hipAiming;
 extern std::atomic<bool> shooting;

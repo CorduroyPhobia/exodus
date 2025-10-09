@@ -14,7 +14,6 @@
 #include "sunone_aimbot_cpp.h"
 #include "keyboard_listener.h"
 #include "overlay.h"
-#include "ghub.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
 
@@ -33,11 +32,6 @@ DirectMLDetector* dml_detector = nullptr;
 MouseThread* globalMouseThread = nullptr;
 Config config;
 
-GhubMouse* gHub = nullptr;
-SerialConnection* arduinoSerial = nullptr;
-Kmbox_b_Connection* kmboxSerial = nullptr;
-KmboxNetConnection* kmboxNetSerial = nullptr;
-
 std::atomic<bool> detection_resolution_changed(false);
 std::atomic<bool> capture_method_changed(false);
 std::atomic<bool> capture_cursor_changed(false);
@@ -46,91 +40,8 @@ std::atomic<bool> capture_fps_changed(false);
 std::atomic<bool> capture_window_changed(false);
 std::atomic<bool> detector_model_changed(false);
 std::atomic<bool> show_window_changed(false);
-std::atomic<bool> input_method_changed(false);
-
 std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
-
-void createInputDevices()
-{
-    if (arduinoSerial)
-    {
-        delete arduinoSerial;
-        arduinoSerial = nullptr;
-    }
-
-    if (gHub)
-    {
-        gHub->mouse_close();
-        delete gHub;
-        gHub = nullptr;
-    }
-
-    if (kmboxSerial)
-    {
-        delete kmboxSerial;
-        kmboxSerial = nullptr;
-    }
-
-    if (kmboxNetSerial)
-    {
-        delete kmboxNetSerial;
-        kmboxNetSerial = nullptr;
-    }
-
-    if (config.input_method == "ARDUINO")
-    {
-        std::cout << "[Mouse] Using Arduino method input." << std::endl;
-        arduinoSerial = new SerialConnection(config.arduino_port, config.arduino_baudrate);
-    }
-    else if (config.input_method == "GHUB")
-    {
-        std::cout << "[Mouse] Using Ghub method input." << std::endl;
-        gHub = new GhubMouse();
-        if (!gHub->mouse_xy(0, 0))
-        {
-            std::cerr << "[Ghub] Error with opening mouse." << std::endl;
-            delete gHub;
-            gHub = nullptr;
-        }
-    }
-    else if (config.input_method == "KMBOX_B")
-    {
-        std::cout << "[Mouse] Using KMBOX_B method input." << std::endl;
-        kmboxSerial = new Kmbox_b_Connection(config.kmbox_b_port, config.kmbox_b_baudrate);
-        if (!kmboxSerial->isOpen())
-        {
-            std::cerr << "[Kmbox] Error connecting to Kmbox serial." << std::endl;
-            delete kmboxSerial;
-            kmboxSerial = nullptr;
-        }
-    }
-    else if (config.input_method == "KMBOX_NET")
-    {
-        std::cout << "[Mouse] Using KMBOX_NET input." << std::endl;
-        kmboxNetSerial = new KmboxNetConnection(config.kmbox_net_ip, config.kmbox_net_port, config.kmbox_net_uuid);
-        if (!kmboxNetSerial->isOpen())
-        {
-            std::cerr << "[KmboxNet] Error connecting." << std::endl;
-            delete kmboxNetSerial; kmboxNetSerial = nullptr;
-        }
-    }
-    else
-    {
-        std::cout << "[Mouse] Using default Win32 method input." << std::endl;
-    }
-}
-
-void assignInputDevices()
-{
-    if (globalMouseThread)
-    {
-        globalMouseThread->setSerialConnection(arduinoSerial);
-        globalMouseThread->setGHubMouse(gHub);
-        globalMouseThread->setKmboxConnection(kmboxSerial);
-        globalMouseThread->setKmboxNetConnection(kmboxNetSerial);
-    }
-}
 
 void handleEasyNoRecoil(MouseThread& mouseThread)
 {
@@ -138,32 +49,13 @@ void handleEasyNoRecoil(MouseThread& mouseThread)
     {
         std::lock_guard<std::mutex> lock(mouseThread.input_method_mutex);
         int recoil_compensation = static_cast<int>(config.easynorecoilstrength);
-        
-        if (arduinoSerial)
-        {
-            arduinoSerial->move(0, recoil_compensation);
-        }
-        else if (gHub)
-        {
-            gHub->mouse_xy(0, recoil_compensation);
-        }
-        else if (kmboxSerial)
-        {
-            kmboxSerial->move(0, recoil_compensation);
-        }
-        else if (kmboxNetSerial)
-        {
-            kmboxNetSerial->move(0, recoil_compensation);
-        }
-        else
-        {
-            INPUT input = { 0 };
-            input.type = INPUT_MOUSE;
-            input.mi.dx = 0;
-            input.mi.dy = recoil_compensation;
-            input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
-            SendInput(1, &input, sizeof(INPUT));
-        }
+
+        INPUT input = { 0 };
+        input.type = INPUT_MOUSE;
+        input.mi.dx = 0;
+        input.mi.dy = recoil_compensation;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
+        SendInput(1, &input, sizeof(INPUT));
     }
 }
 
@@ -185,13 +77,6 @@ void mouseThreadFunction(MouseThread& mouseThread)
             boxes = detectionBuffer.boxes;
             classes = detectionBuffer.classes;
             lastVersion = detectionBuffer.version;
-        }
-
-        if (input_method_changed.load())
-        {
-            createInputDevices();
-            assignInputDevices();
-            input_method_changed.store(false);
         }
 
         if (detection_resolution_changed.load())
@@ -356,8 +241,6 @@ int main()
             }
         }
 
-        createInputDevices();
-
         MouseThread mouseThread(
             config.detection_resolution,
             config.fovX,
@@ -369,16 +252,10 @@ int main()
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms,
-            arduinoSerial,
-            gHub,
-            kmboxSerial,
-            kmboxNetSerial
+            config.auto_shoot_full_auto_grace_ms
         );
 
         globalMouseThread = &mouseThread;
-        
-        assignInputDevices();
 
         std::vector<std::string> availableModels = getAvailableModels();
 
@@ -461,17 +338,6 @@ int main()
 #endif
         mouseMovThread.join();
         overlayThread.join();
-
-        if (arduinoSerial)
-        {
-            delete arduinoSerial;
-        }
-
-        if (gHub)
-        {
-            gHub->mouse_close();
-            delete gHub;
-        }
 
         if (dml_detector)
         {
