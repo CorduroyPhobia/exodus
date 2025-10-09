@@ -69,8 +69,6 @@ bool Config::loadConfig(const std::string& filename)
         auto_hip_aim = true;
 
         // Mouse
-        dpi = 800;
-        sensitivity = 1.0f;
         fovX = 96;
         fovY = 73;
         minSpeedMultiplier = 0.19f;
@@ -156,20 +154,14 @@ bool Config::loadConfig(const std::string& filename)
 
         // Overlay
         overlay_opacity = 225;
-        overlay_snow_theme = true;
         overlay_ui_scale = 1.0f;
 
         // Custom classes
         class_player = 0;
         class_bot = 1;
-        class_weapon = 2;
-        class_outline = 3;
-        class_dead_body = 4;
         class_hideout_target_human = 5;
         class_hideout_target_balls = 6;
         class_head = 7;
-        class_smoke = 8;
-        class_fire = 9;
         class_third_person = 10;
 
         // Debug
@@ -299,8 +291,6 @@ bool Config::loadConfig(const std::string& filename)
     auto_hip_aim = get_bool("auto_hip_aim", true);
 
     // Mouse
-    dpi = get_long("dpi", 800);
-    sensitivity = (float)get_double("sensitivity", 1.0);
     fovX = get_long("fovX", 96);
     fovY = get_long("fovY", 73);
     minSpeedMultiplier = (float)get_double("minSpeedMultiplier", 0.19);
@@ -393,20 +383,14 @@ bool Config::loadConfig(const std::string& filename)
 
     // Overlay
     overlay_opacity = get_long("overlay_opacity", 225);
-    overlay_snow_theme = get_bool("overlay_snow_theme", true);
     overlay_ui_scale = (float)get_double("overlay_ui_scale", 1.0);
 
     // Custom Classes
     class_player = get_long("class_player", 0);
     class_bot = get_long("class_bot", 1);
-    class_weapon = get_long("class_weapon", 2);
-    class_outline = get_long("class_outline", 3);
-    class_dead_body = get_long("class_dead_body", 4);
     class_hideout_target_human = get_long("class_hideout_target_human", 5);
     class_hideout_target_balls = get_long("class_hideout_target_balls", 6);
     class_head = get_long("class_head", 7);
-    class_smoke = get_long("class_smoke", 8);
-    class_fire = get_long("class_fire", 9);
     class_third_person = get_long("class_third_person", 10);
 
     // Debug window
@@ -556,7 +540,6 @@ bool Config::saveConfig(const std::string& filename)
     // Overlay
     file << "# Overlay\n"
         << "overlay_opacity = " << overlay_opacity << "\n"
-        << "overlay_snow_theme = " << (overlay_snow_theme ? "true" : "false") << "\n"
         << std::fixed << std::setprecision(2)
         << "overlay_ui_scale = " << overlay_ui_scale << "\n\n";
 
@@ -564,14 +547,9 @@ bool Config::saveConfig(const std::string& filename)
     file << "# Custom Classes\n"
         << "class_player = " << class_player << "\n"
         << "class_bot = " << class_bot << "\n"
-        << "class_weapon = " << class_weapon << "\n"
-        << "class_outline = " << class_outline << "\n"
-        << "class_dead_body = " << class_dead_body << "\n"
         << "class_hideout_target_human = " << class_hideout_target_human << "\n"
         << "class_hideout_target_balls = " << class_hideout_target_balls << "\n"
         << "class_head = " << class_head << "\n"
-        << "class_smoke = " << class_smoke << "\n"
-        << "class_fire = " << class_fire << "\n"
         << "class_third_person = " << class_third_person << "\n\n";
 
     // Debug
