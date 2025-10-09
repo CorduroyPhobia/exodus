@@ -133,46 +133,6 @@ void draw_mouse()
     ImGui::SliderFloat("Snap Boost Factor", &config.snapBoostFactor, 0.01f, 4.00f, "%.2f");
     draw_target_correction_demo();
 
-    ImGui::SeparatorText("Game Profile");
-    std::vector<std::string> profile_names;
-    for (const auto& kv : config.game_profiles)
-        profile_names.push_back(kv.first);
-
-    static int selected_index = 0;
-    for (size_t i = 0; i < profile_names.size(); ++i)
-    {
-        if (profile_names[i] == config.active_game)
-        {
-            selected_index = static_cast<int>(i);
-            break;
-        }
-    }
-
-    std::vector<const char*> profile_items;
-    for (const auto& name : profile_names)
-        profile_items.push_back(name.c_str());
-
-    if (ImGui::Combo("Active Game Profile", &selected_index, profile_items.data(), static_cast<int>(profile_items.size())))
-    {
-        config.active_game = profile_names[selected_index];
-        config.saveConfig();
-        globalMouseThread->updateConfig(
-            config.detection_resolution,
-            config.fovX,
-            config.fovY,
-            config.minSpeedMultiplier,
-            config.maxSpeedMultiplier,
-            config.predictionInterval,
-            config.auto_shoot,
-            config.bScope_multiplier,
-            config.auto_shoot_fire_delay_ms,
-            config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms
-        );
-    }
-
-    ImGui::Text("Current profile: %s", config.active_game.c_str());
-
     ImGui::SeparatorText("Mouse Sensitivity");
 
     float sens_f = static_cast<float>(config.sens);
@@ -218,42 +178,6 @@ void draw_mouse()
             config.baseFOV = static_cast<double>(baseFOV_f);
 
         config.saveConfig();
-    }
-
-    ImGui::SeparatorText("Manage Profiles");
-
-    static char new_profile_name[64] = "";
-    ImGui::InputText("New profile name", new_profile_name, sizeof(new_profile_name));
-    ImGui::SameLine();
-    if (ImGui::Button("Add Profile"))
-    {
-        std::string name = std::string(new_profile_name);
-        if (!name.empty() && config.game_profiles.count(name) == 0)
-        {
-            Config::GameProfile gp;
-            gp.name = name;
-            config.game_profiles[name] = gp;
-            config.active_game = name;
-            config.saveConfig();
-            new_profile_name[0] = '\0'; // clear
-        }
-    }
-
-    if (config.active_game != "UNIFIED")
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(200, 50, 50, 255));
-        if (ImGui::Button("Delete Current Profile"))
-        {
-            std::string to_remove = config.active_game;
-            config.game_profiles.erase(to_remove);
-            if (!config.game_profiles.empty())
-                config.active_game = config.game_profiles.begin()->first;
-            else
-                config.active_game = "UNIFIED";
-
-            config.saveConfig();
-        }
-        ImGui::PopStyleColor();
     }
 
     ImGui::SeparatorText("Easy No Recoil");
