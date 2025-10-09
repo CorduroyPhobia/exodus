@@ -1,8 +1,11 @@
 #ifndef AI_TUNER_H
 #define AI_TUNER_H
 
+#include <array>
+#include <limits>
 #include <mutex>
 #include <random>
+#include <string>
 #include <vector>
 #include <cstddef>
 
@@ -92,6 +95,12 @@ private:
         bool autoCalibrate = true;
     };
 
+    struct PersistedModeState {
+        MouseSettings settings{};
+        double bestReward = std::numeric_limits<double>::lowest();
+        bool hasData = false;
+    };
+
     struct RuntimeState {
         AimMode currentMode = AimMode::AIM_ASSIST;
         bool trainingActive = false;
@@ -117,6 +126,7 @@ private:
         std::vector<MouseSettings> calibrationSchedule;
         std::vector<MouseSettings> settingsHistory;
         std::vector<double> rewardHistory;
+        std::array<PersistedModeState, 3> persistedStates{};
     };
 
     mutable std::mutex mutex;
@@ -150,6 +160,10 @@ private:
     MouseSettings generateExplorationCandidateLocked();
     void trimHistoryLocked();
     void stopTrainingLocked();
+    void loadPersistedStateLocked();
+    void savePersistedStateLocked();
+    void applyPersistedBestLocked();
+    void updatePersistedBestLocked();
 };
 
 #endif // AI_TUNER_H

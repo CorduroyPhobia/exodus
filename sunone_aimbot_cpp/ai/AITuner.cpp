@@ -1,9 +1,15 @@
 #include "AITuner.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <limits>
 #include <random>
+#include <string>
+#include <system_error>
 
 #include "AimbotTarget.h"
 
@@ -11,6 +17,105 @@ namespace {
 constexpr float kMinFloatEpsilon = 1e-3f;
 constexpr std::size_t kMaxHistoryEntries = 256;
 constexpr double kRewardTolerance = 1e-4;
+constexpr char kPersistedStateFile[] = "config/ai_tuner_state.ini";
+
+int modeIndex(AimMode mode) {
+    switch (mode) {
+        case AimMode::AIM_ASSIST:
+            return 0;
+        case AimMode::AIM_BOT:
+            return 1;
+        case AimMode::RAGE_BAITER:
+        default:
+            return 2;
+    }
+}
+
+std::string modeToString(AimMode mode) {
+    switch (mode) {
+        case AimMode::AIM_ASSIST:
+            return "aim_assist";
+        case AimMode::AIM_BOT:
+            return "aim_bot";
+        case AimMode::RAGE_BAITER:
+        default:
+            return "rage_baiter";
+    }
+}
+
+bool modeFromString(const std::string& value, AimMode& mode) {
+    std::string lower;
+    lower.reserve(value.size());
+    for (char ch : value) {
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+
+    if (lower == "aim_assist") {
+        mode = AimMode::AIM_ASSIST;
+        return true;
+    }
+    if (lower == "aim_bot") {
+        mode = AimMode::AIM_BOT;
+        return true;
+    }
+    if (lower == "rage_baiter" || lower == "ragebaiter") {
+        mode = AimMode::RAGE_BAITER;
+        return true;
+    }
+    return false;
+}
+
+std::string trim(const std::string& input) {
+    std::size_t begin = 0;
+    std::size_t end = input.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(input[begin]))) {
+        ++begin;
+    }
+    while (end > begin && std::isspace(static_cast<unsigned char>(input[end - 1]))) {
+        --end;
+    }
+    return input.substr(begin, end - begin);
+}
+
+int parseInt(const std::string& value, int fallback) {
+    try {
+        return std::stoi(value);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+float parseFloat(const std::string& value, float fallback) {
+    try {
+        return std::stof(value);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+double parseDouble(const std::string& value, double fallback) {
+    try {
+        return std::stod(value);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+bool parseBool(const std::string& value, bool fallback) {
+    std::string lower;
+    lower.reserve(value.size());
+    for (char ch : value) {
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+
+    if (lower == "true" || lower == "1" || lower == "yes" || lower == "on") {
+        return true;
+    }
+    if (lower == "false" || lower == "0" || lower == "no" || lower == "off") {
+        return false;
+    }
+    return fallback;
+}
 
 template <typename T>
 T clampValue(T value, T minValue, T maxValue) {
@@ -56,6 +161,7 @@ AITuner::AITuner() {
     state.historyLimit = kMaxHistoryEntries;
     state.bestReward = std::numeric_limits<double>::lowest();
     state.totalIterations = config.maxIterations;
+    loadPersistedStateLocked();
     applyModeLocked(state.currentMode);
 }
 
@@ -180,6 +286,13 @@ void AITuner::setSettingsBounds(const MouseSettings& min, const MouseSettings& m
     state.currentSettings = sanitizeSettings(state.currentSettings, state.minBounds, state.maxBounds);
     state.bestSettings = sanitizeSettings(state.bestSettings, state.minBounds, state.maxBounds);
 
+    for (auto& persisted : state.persistedStates) {
+        if (persisted.hasData) {
+            persisted.settings = sanitizeSettings(persisted.settings, state.minBounds, state.maxBounds);
+        }
+    }
+    savePersistedStateLocked();
+
     if (state.trainingActive && state.calibrating) {
         rebuildCalibrationScheduleLocked();
         if (!state.calibrationSchedule.empty()) {
@@ -198,6 +311,7 @@ void AITuner::startTraining() {
     state.trainingActive = true;
     state.paused = false;
     resetStatisticsLocked();
+    applyPersistedBestLocked();
 
     if (config.autoCalibrate) {
         state.calibrating = true;
@@ -238,12 +352,11 @@ void AITuner::resetTraining() {
     std::lock_guard<std::mutex> lock(mutex);
 
     resetStatisticsLocked();
+    applyPersistedBestLocked();
     if (!state.trainingActive) {
         state.calibrating = false;
         state.calibrationSchedule.clear();
         state.calibrationIndex = 0;
-        state.currentSettings = sanitizeSettings(state.currentSettings, state.minBounds, state.maxBounds);
-        state.bestSettings = state.currentSettings;
         return;
     }
 
@@ -568,6 +681,7 @@ void AITuner::applyModeLocked(AimMode mode) {
     state.calibrationSchedule.clear();
     state.calibrationIndex = 0;
     resetStatisticsLocked();
+    applyPersistedBestLocked();
     if (state.trainingActive) {
         beginEvaluationLocked(state.currentSettings);
     }
@@ -611,6 +725,7 @@ void AITuner::finalizeEvaluationLocked(double averageReward) {
             state.bestReward == std::numeric_limits<double>::lowest()) {
             state.bestReward = averageReward;
             state.bestSettings = state.currentSettings;
+            updatePersistedBestLocked();
         }
 
         if (state.calibrationIndex + 1 >= state.calibrationSchedule.size()) {
@@ -630,6 +745,7 @@ void AITuner::finalizeEvaluationLocked(double averageReward) {
         averageReward > state.bestReward + kRewardTolerance) {
         state.bestReward = averageReward;
         state.bestSettings = state.currentSettings;
+        updatePersistedBestLocked();
     } else if (averageReward + kRewardTolerance < state.bestReward) {
         beginEvaluationLocked(state.bestSettings);
         return;
@@ -735,4 +851,231 @@ void AITuner::stopTrainingLocked() {
     state.calibrationIndex = 0;
     state.evaluationRewardSum = 0.0;
     state.evaluationSamplesCollected = 0;
+}
+
+void AITuner::loadPersistedStateLocked() {
+    for (auto& entry : state.persistedStates) {
+        entry.settings = MouseSettings{};
+        entry.bestReward = std::numeric_limits<double>::lowest();
+        entry.hasData = false;
+    }
+
+    std::filesystem::path path(kPersistedStateFile);
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return;
+    }
+
+    AimMode currentMode = AimMode::AIM_ASSIST;
+    MouseSettings blockSettings{};
+    double blockReward = std::numeric_limits<double>::lowest();
+    bool blockActive = false;
+    bool blockHasSettings = false;
+    bool blockHasReward = false;
+
+    auto finalizeBlock = [&]() {
+        if (!blockActive || !blockHasSettings) {
+            return;
+        }
+        auto& persisted = state.persistedStates[modeIndex(currentMode)];
+        persisted.settings = sanitizeSettings(blockSettings, state.minBounds, state.maxBounds);
+        persisted.bestReward = blockHasReward ? blockReward : std::numeric_limits<double>::lowest();
+        persisted.hasData = true;
+    };
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        const auto eqPos = line.find('=');
+        if (eqPos == std::string::npos) {
+            continue;
+        }
+
+        const std::string key = trim(line.substr(0, eqPos));
+        const std::string value = trim(line.substr(eqPos + 1));
+
+        if (key == "mode") {
+            if (blockActive) {
+                finalizeBlock();
+            }
+
+            AimMode parsedMode;
+            if (modeFromString(value, parsedMode)) {
+                currentMode = parsedMode;
+                blockSettings = MouseSettings{};
+                blockReward = std::numeric_limits<double>::lowest();
+                blockActive = true;
+                blockHasSettings = false;
+                blockHasReward = false;
+            } else {
+                blockActive = false;
+            }
+            continue;
+        }
+
+        if (!blockActive) {
+            continue;
+        }
+
+        if (key == "best_reward") {
+            blockReward = parseDouble(value, blockReward);
+            blockHasReward = true;
+            continue;
+        }
+
+        if (key == "dpi") {
+            blockSettings.dpi = parseInt(value, blockSettings.dpi);
+            blockHasSettings = true;
+        } else if (key == "sensitivity") {
+            blockSettings.sensitivity = parseFloat(value, blockSettings.sensitivity);
+            blockHasSettings = true;
+        } else if (key == "minSpeedMultiplier") {
+            blockSettings.minSpeedMultiplier = parseFloat(value, blockSettings.minSpeedMultiplier);
+            blockHasSettings = true;
+        } else if (key == "maxSpeedMultiplier") {
+            blockSettings.maxSpeedMultiplier = parseFloat(value, blockSettings.maxSpeedMultiplier);
+            blockHasSettings = true;
+        } else if (key == "predictionInterval") {
+            blockSettings.predictionInterval = parseFloat(value, blockSettings.predictionInterval);
+            blockHasSettings = true;
+        } else if (key == "snapRadius") {
+            blockSettings.snapRadius = parseFloat(value, blockSettings.snapRadius);
+            blockHasSettings = true;
+        } else if (key == "nearRadius") {
+            blockSettings.nearRadius = parseFloat(value, blockSettings.nearRadius);
+            blockHasSettings = true;
+        } else if (key == "speedCurveExponent") {
+            blockSettings.speedCurveExponent = parseFloat(value, blockSettings.speedCurveExponent);
+            blockHasSettings = true;
+        } else if (key == "snapBoostFactor") {
+            blockSettings.snapBoostFactor = parseFloat(value, blockSettings.snapBoostFactor);
+            blockHasSettings = true;
+        } else if (key == "wind_mouse_enabled") {
+            blockSettings.wind_mouse_enabled = parseBool(value, blockSettings.wind_mouse_enabled);
+            blockHasSettings = true;
+        } else if (key == "wind_G") {
+            blockSettings.wind_G = parseFloat(value, blockSettings.wind_G);
+            blockHasSettings = true;
+        } else if (key == "wind_W") {
+            blockSettings.wind_W = parseFloat(value, blockSettings.wind_W);
+            blockHasSettings = true;
+        } else if (key == "wind_M") {
+            blockSettings.wind_M = parseFloat(value, blockSettings.wind_M);
+            blockHasSettings = true;
+        } else if (key == "wind_D") {
+            blockSettings.wind_D = parseFloat(value, blockSettings.wind_D);
+            blockHasSettings = true;
+        } else if (key == "easynorecoil") {
+            blockSettings.easynorecoil = parseBool(value, blockSettings.easynorecoil);
+            blockHasSettings = true;
+        } else if (key == "easynorecoilstrength") {
+            blockSettings.easynorecoilstrength = parseFloat(value, blockSettings.easynorecoilstrength);
+            blockHasSettings = true;
+        }
+    }
+
+    finalizeBlock();
+}
+
+void AITuner::savePersistedStateLocked() {
+    bool hasAny = false;
+    for (const auto& entry : state.persistedStates) {
+        if (entry.hasData) {
+            hasAny = true;
+            break;
+        }
+    }
+
+    std::filesystem::path path(kPersistedStateFile);
+    if (!hasAny) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        return;
+    }
+
+    std::error_code ec;
+    const auto parent = path.parent_path();
+    if (!parent.empty()) {
+        std::filesystem::create_directories(parent, ec);
+    }
+
+    std::ofstream file(path, std::ios::trunc);
+    if (!file.is_open()) {
+        return;
+    }
+
+    file << "# Persisted AI tuner state\n";
+    file << "# Automatically generated.\n\n";
+
+    for (int index = 0; index < static_cast<int>(state.persistedStates.size()); ++index) {
+        const auto& entry = state.persistedStates[static_cast<std::size_t>(index)];
+        if (!entry.hasData) {
+            continue;
+        }
+
+        AimMode mode = static_cast<AimMode>(index);
+        MouseSettings sanitized = sanitizeSettings(entry.settings, state.minBounds, state.maxBounds);
+
+        file << "mode=" << modeToString(mode) << "\n";
+        file << std::defaultfloat << std::setprecision(10);
+        file << "best_reward=" << entry.bestReward << "\n";
+        file << std::fixed << std::setprecision(6);
+        file << "dpi=" << sanitized.dpi << "\n";
+        file << "sensitivity=" << sanitized.sensitivity << "\n";
+        file << "minSpeedMultiplier=" << sanitized.minSpeedMultiplier << "\n";
+        file << "maxSpeedMultiplier=" << sanitized.maxSpeedMultiplier << "\n";
+        file << "predictionInterval=" << sanitized.predictionInterval << "\n";
+        file << "snapRadius=" << sanitized.snapRadius << "\n";
+        file << "nearRadius=" << sanitized.nearRadius << "\n";
+        file << "speedCurveExponent=" << sanitized.speedCurveExponent << "\n";
+        file << "snapBoostFactor=" << sanitized.snapBoostFactor << "\n";
+        file << "wind_mouse_enabled=" << (sanitized.wind_mouse_enabled ? "true" : "false") << "\n";
+        file << "wind_G=" << sanitized.wind_G << "\n";
+        file << "wind_W=" << sanitized.wind_W << "\n";
+        file << "wind_M=" << sanitized.wind_M << "\n";
+        file << "wind_D=" << sanitized.wind_D << "\n";
+        file << "easynorecoil=" << (sanitized.easynorecoil ? "true" : "false") << "\n";
+        file << "easynorecoilstrength=" << sanitized.easynorecoilstrength << "\n\n";
+    }
+}
+
+void AITuner::applyPersistedBestLocked() {
+    const auto& persisted = state.persistedStates[modeIndex(state.currentMode)];
+    if (!persisted.hasData) {
+        state.currentSettings = sanitizeSettings(state.currentSettings, state.minBounds, state.maxBounds);
+        state.bestSettings = sanitizeSettings(state.bestSettings, state.minBounds, state.maxBounds);
+        return;
+    }
+
+    state.bestSettings = sanitizeSettings(persisted.settings, state.minBounds, state.maxBounds);
+    state.currentSettings = state.bestSettings;
+    state.bestReward = persisted.bestReward;
+}
+
+void AITuner::updatePersistedBestLocked() {
+    if (state.bestReward == std::numeric_limits<double>::lowest()) {
+        return;
+    }
+
+    const int index = modeIndex(state.currentMode);
+    MouseSettings sanitized = sanitizeSettings(state.bestSettings, state.minBounds, state.maxBounds);
+    auto& persisted = state.persistedStates[static_cast<std::size_t>(index)];
+
+    const bool settingsChanged = !persisted.hasData ||
+                                 !settingsApproximatelyEqual(persisted.settings, sanitized);
+    const bool rewardChanged = !persisted.hasData ||
+                               std::fabs(persisted.bestReward - state.bestReward) > kRewardTolerance;
+
+    if (!settingsChanged && !rewardChanged) {
+        return;
+    }
+
+    persisted.settings = sanitized;
+    persisted.bestReward = state.bestReward;
+    persisted.hasData = true;
+    savePersistedStateLocked();
 }
