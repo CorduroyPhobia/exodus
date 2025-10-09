@@ -25,6 +25,8 @@ public:
     bool disable_headshot;
     float body_y_offset;
     float head_y_offset;
+    float body_distance_compensation;
+    float head_distance_compensation;
     bool ignore_third_person;
     bool shooting_range_targets;
     bool auto_aim;

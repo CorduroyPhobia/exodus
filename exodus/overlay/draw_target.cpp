@@ -18,6 +18,8 @@ ImVec2 bodyImageSize;
 bool prev_disable_headshot = config.disable_headshot;
 float prev_body_y_offset = config.body_y_offset;
 float prev_head_y_offset = config.head_y_offset;
+float prev_body_distance_compensation = config.body_distance_compensation;
+float prev_head_distance_compensation = config.head_distance_compensation;
 bool prev_ignore_third_person = config.ignore_third_person;
 bool prev_shooting_range_targets = config.shooting_range_targets;
 bool prev_auto_aim = config.auto_aim;
@@ -36,6 +38,9 @@ void draw_target()
 
     ImGui::SliderFloat("Approximate Body Y Offset", &config.body_y_offset, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("Approximate Head Y Offset", &config.head_y_offset, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Body distance compensation", &config.body_distance_compensation, -0.50f, 0.50f, "%.2f");
+    ImGui::SliderFloat("Head distance compensation", &config.head_distance_compensation, -0.50f, 0.50f, "%.2f");
+    ImGui::TextDisabled("Positive values raise the aim for distant (smaller) targets.");
     
     if (bodyTexture)
     {
@@ -78,6 +83,8 @@ void draw_target()
     if (prev_disable_headshot != config.disable_headshot ||
         prev_body_y_offset != config.body_y_offset ||
         prev_head_y_offset != config.head_y_offset ||
+        prev_body_distance_compensation != config.body_distance_compensation ||
+        prev_head_distance_compensation != config.head_distance_compensation ||
         prev_ignore_third_person != config.ignore_third_person ||
         prev_shooting_range_targets != config.shooting_range_targets ||
         prev_auto_aim != config.auto_aim ||
@@ -88,6 +95,8 @@ void draw_target()
         prev_disable_headshot = config.disable_headshot;
         prev_body_y_offset = config.body_y_offset;
         prev_head_y_offset = config.head_y_offset;
+        prev_body_distance_compensation = config.body_distance_compensation;
+        prev_head_distance_compensation = config.head_distance_compensation;
         prev_ignore_third_person = config.ignore_third_person;
         prev_shooting_range_targets = config.shooting_range_targets;
         prev_auto_aim = config.auto_aim;

@@ -3,6 +3,7 @@
 #include <winsock2.h>
 #include <Windows.h>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <opencv2/opencv.hpp>
@@ -33,6 +34,15 @@ AimbotTarget* sortTargets(
     double minDistance = std::numeric_limits<double>::max();
     int nearestIdx = -1;
     int targetY = 0;
+    auto computeOffsetFactor = [&](const cv::Rect& box, double baseOffset, double distanceComp)
+    {
+        if (screenHeight <= 0)
+            return std::clamp(baseOffset, 0.0, 2.0);
+        double normalizedHeight = static_cast<double>(box.height) / static_cast<double>(screenHeight);
+        normalizedHeight = std::clamp(normalizedHeight, 0.0, 1.0);
+        double adjusted = baseOffset + (1.0 - normalizedHeight) * distanceComp;
+        return std::clamp(adjusted, 0.0, 2.0);
+    };
 
     if (!disableHeadshot)
     {
@@ -40,7 +50,8 @@ AimbotTarget* sortTargets(
         {
             if (classes[i] == config.class_head)
             {
-                int headOffsetY = static_cast<int>(boxes[i].height * config.head_y_offset);
+                double offsetFactor = computeOffsetFactor(boxes[i], config.head_y_offset, config.head_distance_compensation);
+                int headOffsetY = static_cast<int>(boxes[i].height * offsetFactor);
                 cv::Point targetPoint(boxes[i].x + boxes[i].width / 2, boxes[i].y + headOffsetY);
                 double distance = std::pow(targetPoint.x - center.x, 2) + std::pow(targetPoint.y - center.y, 2);
                 if (distance < minDistance)
@@ -67,7 +78,8 @@ AimbotTarget* sortTargets(
                 (classes[i] == config.class_hideout_target_balls && config.shooting_range_targets) ||
                 (classes[i] == config.class_third_person && !config.ignore_third_person))
             {
-                int offsetY = static_cast<int>(boxes[i].height * config.body_y_offset);
+                double offsetFactor = computeOffsetFactor(boxes[i], config.body_y_offset, config.body_distance_compensation);
+                int offsetY = static_cast<int>(boxes[i].height * offsetFactor);
                 cv::Point targetPoint(boxes[i].x + boxes[i].width / 2, boxes[i].y + offsetY);
                 double distance = std::pow(targetPoint.x - center.x, 2) + std::pow(targetPoint.y - center.y, 2);
                 if (distance < minDistance)
@@ -88,7 +100,8 @@ AimbotTarget* sortTargets(
     int finalY = 0;
     if (classes[nearestIdx] == config.class_head)
     {
-        int headOffsetY = static_cast<int>(boxes[nearestIdx].height * config.head_y_offset);
+        double offsetFactor = computeOffsetFactor(boxes[nearestIdx], config.head_y_offset, config.head_distance_compensation);
+        int headOffsetY = static_cast<int>(boxes[nearestIdx].height * offsetFactor);
         finalY = boxes[nearestIdx].y + headOffsetY - boxes[nearestIdx].height / 2;
     }
     else
