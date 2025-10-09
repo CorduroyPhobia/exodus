@@ -102,6 +102,9 @@ void MouseThread::updateConfig(
     wind_min_velocity = config.wind_min_velocity;
     wind_target_radius = config.wind_target_radius;
     wind_max_step_config = config.wind_M;
+
+    residual_move_x = 0.0;
+    residual_move_y = 0.0;
 }
 
 MouseThread::~MouseThread()
@@ -363,6 +366,20 @@ double MouseThread::calculate_speed_multiplier(double distance)
         (max_speed_multiplier - min_speed_multiplier) * norm;
 }
 
+std::pair<int, int> MouseThread::resolveMovementSteps(double moveX, double moveY)
+{
+    double totalX = moveX + residual_move_x;
+    double totalY = moveY + residual_move_y;
+
+    int stepX = static_cast<int>(std::lround(totalX));
+    int stepY = static_cast<int>(std::lround(totalY));
+
+    residual_move_x = totalX - static_cast<double>(stepX);
+    residual_move_y = totalY - static_cast<double>(stepY);
+
+    return { stepX, stepY };
+}
+
 bool MouseThread::check_target_in_scope(double target_x, double target_y, double target_w, double target_h, double reduction_factor)
 {
     double center_target_x = target_x + target_w / 2.0;
@@ -388,7 +405,12 @@ void MouseThread::moveMouse(const AimbotTarget& target)
         target.y + target.h / 2.0);
 
     auto mv = calc_movement(predicted.first, predicted.second);
-    queueMove(static_cast<int>(mv.first), static_cast<int>(mv.second));
+    auto steps = resolveMovementSteps(mv.first, mv.second);
+    if (steps.first == 0 && steps.second == 0)
+    {
+        return;
+    }
+    queueMove(steps.first, steps.second);
 }
 
 void MouseThread::moveMousePivot(double pivotX, double pivotY)
@@ -416,8 +438,9 @@ void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMo
         }
 
         auto m0 = calc_movement(pivotX, pivotY);
-        int mx0 = static_cast<int>(m0.first);
-        int my0 = static_cast<int>(m0.second);
+        auto steps0 = resolveMovementSteps(m0.first, m0.second);
+        int mx0 = steps0.first;
+        int my0 = steps0.second;
         if (mx0 == 0 && my0 == 0)
         {
             return;
@@ -454,8 +477,9 @@ void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMo
     double predY = pivotY + vy * prediction_interval + vy * 0.002;
 
     auto mv = calc_movement(predX, predY);
-    int mx = static_cast<int>(mv.first);
-    int my = static_cast<int>(mv.second);
+    auto steps = resolveMovementSteps(mv.first, mv.second);
+    int mx = steps.first;
+    int my = steps.second;
 
     if (mx == 0 && my == 0)
     {
@@ -541,6 +565,8 @@ void MouseThread::resetPrediction()
     prev_velocity_x = 0;
     prev_velocity_y = 0;
     target_detected.store(false);
+    residual_move_x = 0.0;
+    residual_move_y = 0.0;
 }
 
 void MouseThread::checkAndResetPredictions()

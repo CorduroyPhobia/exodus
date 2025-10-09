@@ -59,6 +59,9 @@ private:
     std::vector<std::pair<double, double>> futurePositions;
     std::mutex                    futurePositionsMutex;
 
+    double residual_move_x = 0.0;
+    double residual_move_y = 0.0;
+
     void moveWorkerLoop();
     void queueMove(int dx, int dy);
 
@@ -72,6 +75,7 @@ private:
     void sendMouseRelease();
 
     std::pair<double, double> calc_movement(double target_x, double target_y);
+    std::pair<int, int> resolveMovementSteps(double moveX, double moveY);
     double calculate_speed_multiplier(double distance);
 
 public:
