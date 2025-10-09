@@ -146,10 +146,12 @@
   <PropertyGroup>
     <OpenCVNativePath Condition="'$(OpenCVNativePath)' == '' and '$(EXODUS_OPENCV_ROOT)' != ''">$(EXODUS_OPENCV_ROOT)</OpenCVNativePath>
     <TensorRTNativePath Condition="'$(TensorRTNativePath)' == '' and '$(EXODUS_TENSORRT_ROOT)' != ''">$(EXODUS_TENSORRT_ROOT)</TensorRTNativePath>
+    <OpenCVNativeDirFullPath>@(OpenCVNativeDir->'%(FullPath)')</OpenCVNativeDirFullPath>
+    <TensorRTNativeDirFullPath>@(TensorRTNativeDir->'%(FullPath)')</TensorRTNativeDirFullPath>
   </PropertyGroup>
   <PropertyGroup>
-    <OpenCVNativePath Condition="'$(OpenCVNativePath)' == '' and '@(OpenCVNativeDir)' != ''">@(OpenCVNativeDir->'%(FullPath)')</OpenCVNativePath>
-    <TensorRTNativePath Condition="'$(TensorRTNativePath)' == '' and '@(TensorRTNativeDir)' != ''">@(TensorRTNativeDir->'%(FullPath)')</TensorRTNativePath>
+    <OpenCVNativePath Condition="'$(OpenCVNativePath)' == '' and '$(OpenCVNativeDirFullPath)' != ''">$(OpenCVNativeDirFullPath)</OpenCVNativePath>
+    <TensorRTNativePath Condition="'$(TensorRTNativePath)' == '' and '$(TensorRTNativeDirFullPath)' != ''">$(TensorRTNativeDirFullPath)</TensorRTNativePath>
     <OpenCVAdditionalInclude />
     <OpenCVAdditionalLib />
     <TensorRTAdditionalInclude />
