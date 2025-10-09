@@ -107,6 +107,7 @@ public:
     );
 
     void moveMousePivot(double pivotX, double pivotY);
+    void updatePivotTracking(double pivotX, double pivotY, bool allowMovement);
     std::pair<double, double> predict_target_position(double target_x, double target_y);
     void moveMouse(const AimbotTarget& target);
     void pressMouse(const AimbotTarget& target);

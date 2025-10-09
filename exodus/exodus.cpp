@@ -135,13 +135,9 @@ void mouseThreadFunction(MouseThread& mouseThread)
             detection_resolution_changed.store(false);
         }
 
-        if (config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire))
-        {
-            mouseThread.clearFuturePositions();
-            mouseThread.setTargetDetected(false);
-            mouseThread.releaseMouse();
-            continue;
-        }
+        bool overlayPause = config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire);
+        bool aimingActive = aiming.load(std::memory_order_relaxed);
+        bool canMoveMouse = aimingActive && !overlayPause;
 
         AimbotTarget* target = sortTargets(
             boxes,
@@ -156,6 +152,8 @@ void mouseThreadFunction(MouseThread& mouseThread)
             mouseThread.setLastTargetTime(std::chrono::steady_clock::now());
             mouseThread.setTargetDetected(true);
 
+            mouseThread.updatePivotTracking(target->pivotX, target->pivotY, canMoveMouse);
+
             auto futurePositions = mouseThread.predictFuturePositions(
                 target->pivotX,
                 target->pivotY,
@@ -169,23 +167,11 @@ void mouseThreadFunction(MouseThread& mouseThread)
             mouseThread.setTargetDetected(false);
         }
 
-        if (aiming)
+        if (canMoveMouse && target)
         {
-            if (target)
+            if (config.auto_shoot)
             {
-                mouseThread.moveMousePivot(target->pivotX, target->pivotY);
-
-                if (config.auto_shoot)
-                {
-                    mouseThread.pressMouse(*target);
-                }
-            }
-            else
-            {
-                if (config.auto_shoot)
-                {
-                    mouseThread.releaseMouse();
-                }
+                mouseThread.pressMouse(*target);
             }
         }
         else
@@ -196,10 +182,15 @@ void mouseThreadFunction(MouseThread& mouseThread)
             }
         }
 
+        if (overlayPause)
+        {
+            mouseThread.releaseMouse();
+        }
+
         handleEasyNoRecoil(mouseThread);
 
         mouseThread.checkAndResetPredictions();
-        
+
         delete target;
     }
 }

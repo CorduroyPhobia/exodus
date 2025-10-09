@@ -393,6 +393,11 @@ void MouseThread::moveMouse(const AimbotTarget& target)
 
 void MouseThread::moveMousePivot(double pivotX, double pivotY)
 {
+    updatePivotTracking(pivotX, pivotY, true);
+}
+
+void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMovement)
+{
     std::lock_guard lg(input_method_mutex);
 
     auto current_time = std::chrono::steady_clock::now();
@@ -400,11 +405,32 @@ void MouseThread::moveMousePivot(double pivotX, double pivotY)
     if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
     {
         prev_time = current_time;
-        prev_x = pivotX; prev_y = pivotY;
-        prev_velocity_x = prev_velocity_y = 0.0;
+        prev_x = pivotX;
+        prev_y = pivotY;
+        prev_velocity_x = 0.0;
+        prev_velocity_y = 0.0;
+
+        if (!allowMovement)
+        {
+            return;
+        }
 
         auto m0 = calc_movement(pivotX, pivotY);
-        queueMove(static_cast<int>(m0.first), static_cast<int>(m0.second));
+        int mx0 = static_cast<int>(m0.first);
+        int my0 = static_cast<int>(m0.second);
+        if (mx0 == 0 && my0 == 0)
+        {
+            return;
+        }
+
+        if (wind_mouse_enabled)
+        {
+            windMouseMoveRelative(mx0, my0);
+        }
+        else
+        {
+            queueMove(mx0, my0);
+        }
         return;
     }
 
@@ -414,8 +440,15 @@ void MouseThread::moveMousePivot(double pivotX, double pivotY)
 
     double vx = std::clamp((pivotX - prev_x) / dt, -20000.0, 20000.0);
     double vy = std::clamp((pivotY - prev_y) / dt, -20000.0, 20000.0);
-    prev_x = pivotX; prev_y = pivotY;
-    prev_velocity_x = vx;  prev_velocity_y = vy;
+    prev_x = pivotX;
+    prev_y = pivotY;
+    prev_velocity_x = vx;
+    prev_velocity_y = vy;
+
+    if (!allowMovement)
+    {
+        return;
+    }
 
     double predX = pivotX + vx * prediction_interval + vx * 0.002;
     double predY = pivotY + vy * prediction_interval + vy * 0.002;
