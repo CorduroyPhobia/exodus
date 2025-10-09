@@ -1,15 +1,15 @@
 <div align="center">
 
-# Sunone Aimbot C++
+# Exodus
 
-[![C++](https://img.shields.io/badge/C%2B%2B-17-blue)](https://github.com/SunOner/sunone_aimbot_cpp)
-[![License MIT](https://badgen.net/github/license/SunOner/sunone_aimbot_cpp)](https://github.com/SunOner/sunone_aimbot_cpp/blob/main/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/SunOner/sunone_aimbot_cpp?color=ffb500)](https://github.com/SunOner/sunone_aimbot_cpp)
-[![Discord server](https://badgen.net/discord/online-members/sunone)](https://discord.gg/37WVp6sNEh)
+[![C++](https://img.shields.io/badge/C%2B%2B-17-blue)](https://github.com/ExodusTeam/exodus)
+[![License MIT](https://badgen.net/github/license/ExodusTeam/exodus)](https://github.com/ExodusTeam/exodus/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/ExodusTeam/exodus?color=ffb500)](https://github.com/ExodusTeam/exodus)
+[![Discord server](https://badgen.net/discord/online-members/exodus)](https://discord.gg/37WVp6sNEh)
 
   <p>
-    <a href="https://github.com/SunOner/sunone_aimbot_cpp/releases" target="_blank">
-      <img width="75%" src="https://github.com/SunOner/sunone_aimbot/blob/main/media/one.gif">
+    <a href="https://github.com/ExodusTeam/exodus/releases" target="_blank">
+      <strong>Download the latest release</strong>
     </a>
   </p>
 </div>
@@ -119,8 +119,8 @@ Before building the project, **download and place all third-party dependencies**
 **Required folders inside your repository:**
 
 ```
-sunone_aimbot_cpp/
-└── sunone_aimbot_cpp/
+exodus/
+└── exodus/
     └── modules/
 ```
 
@@ -128,12 +128,12 @@ sunone_aimbot_cpp/
 
 | Library   | Path                                                              |
 | --------- | ----------------------------------------------------------------- |
-| SimpleIni | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/SimpleIni.h`         |
-| serial    | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/serial/`             |
-| TensorRT  | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/TensorRT-10.8.0.43/` |
-| GLFW      | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/glfw-3.4.bin.WIN64/` |
-| OpenCV    | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/`             |
-| cuDNN     | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/`              |
+| SimpleIni | `exodus/exodus/modules/SimpleIni.h`         |
+| serial    | `exodus/exodus/modules/serial/`             |
+| TensorRT  | `exodus/exodus/modules/TensorRT-10.8.0.43/` |
+| GLFW      | `exodus/exodus/modules/glfw-3.4.bin.WIN64/` |
+| OpenCV    | `exodus/exodus/modules/opencv/`             |
+| cuDNN     | `exodus/exodus/modules/cudnn/`              |
 
 * **SimpleIni:**
   Download [`SimpleIni.h`](https://github.com/brofield/simpleini/blob/master/SimpleIni.h)
@@ -144,7 +144,7 @@ sunone_aimbot_cpp/
   To build, open
 
   ```
-  sunone_aimbot_cpp/sunone_aimbot_cpp/modules/serial/visual_studio/visual_studio.sln
+  exodus/exodus/modules/serial/visual_studio/visual_studio.sln
   ```
 
   * Set **C/C++ > Code Generation > Runtime Library** to **Multi-threaded (/MT)**
@@ -165,13 +165,13 @@ sunone_aimbot_cpp/
 
 * **cuDNN:**
   Place cuDNN files here (for CUDA build):
-  `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/`
+  `exodus/exodus/modules/cudnn/`
 
 **Example structure after setup:**
 
 ```
-sunone_aimbot_cpp/
-└── sunone_aimbot_cpp/
+exodus/
+└── exodus/
     └── modules/
         ├── SimpleIni.h
         ├── serial/
@@ -201,22 +201,22 @@ sunone_aimbot_cpp/
 2. **Prepare Directories**
 
    * Create:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/`
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build`
+     `exodus/exodus/modules/opencv/`
+     `exodus/exodus/modules/opencv/build`
    * Extract `opencv-4.10.0` into
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv-4.10.0`
+     `exodus/exodus/modules/opencv/opencv-4.10.0`
    * Extract `opencv_contrib-4.10.0` into
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv_contrib-4.10.0`
+     `exodus/exodus/modules/opencv/opencv_contrib-4.10.0`
    * Extract cuDNN to
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn`
+     `exodus/exodus/modules/cudnn`
 
 3. **Configure with CMake**
 
    * Open CMake GUI
    * Source code:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv-4.10.0`
+     `exodus/exodus/modules/opencv/opencv-4.10.0`
    * Build directory:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build`
+     `exodus/exodus/modules/opencv/build`
    * Click **Configure**
      (Choose "Visual Studio 17 2022", x64)
 
@@ -230,15 +230,15 @@ sunone_aimbot_cpp/
      * `CUDA_FAST_MATH` = ON
      * `WITH_CUDNN` = ON
      * `CUDNN_LIBRARY` =
-       `full_path_to/sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/lib/x64/cudnn.lib`
+       `full_path_to/exodus/exodus/modules/cudnn/lib/x64/cudnn.lib`
      * `CUDNN_INCLUDE_DIR` =
-       `full_path_to/sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/include`
+       `full_path_to/exodus/exodus/modules/cudnn/include`
      * `CUDA_ARCH_BIN` =
        See [CUDA Wikipedia](https://en.wikipedia.org/wiki/CUDA) for your GPU.
        Example for RTX 3080-Ti: `8.6`
      * `OPENCV_DNN_CUDA` = ON
      * `OPENCV_EXTRA_MODULES_PATH` =
-       `full_path_to/sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv_contrib-4.10.0/modules`
+       `full_path_to/exodus/exodus/modules/opencv/opencv_contrib-4.10.0/modules`
      * `BUILD_opencv_world` = ON
    * Uncheck:
 
@@ -250,7 +250,7 @@ sunone_aimbot_cpp/
 
 5. **Build in Visual Studio**
 
-   * Open `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/OpenCV.sln`
+   * Open `exodus/exodus/modules/opencv/build/OpenCV.sln`
      or click "Open Project" in CMake
    * Set build config: **x64 | Release**
    * Build `ALL_BUILD` target (can take up to 2 hours)
@@ -259,11 +259,11 @@ sunone_aimbot_cpp/
 6. **Copy Resulting DLLs**
 
    * DLLs:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/install/x64/vc16/bin/`
+     `exodus/exodus/modules/opencv/build/install/x64/vc16/bin/`
    * LIBs:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/install/x64/vc16/lib/`
+     `exodus/exodus/modules/opencv/build/install/x64/vc16/lib/`
    * Includes:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/install/include/opencv2`
+     `exodus/exodus/modules/opencv/build/install/include/opencv2`
    * Copy needed DLLs (`opencv_world4100.dll`, etc.) next to your project’s executable.
 
 ---
@@ -313,7 +313,7 @@ sunone_aimbot_cpp/
 ## 📋 Configuration
 
 * See all configuration options and documentation here:
-  [config\_cpp.md](https://github.com/SunOner/sunone_aimbot_docs/blob/main/config/config_cpp.md)
+  [config\_cpp.md](https://github.com/ExodusTeam/exodus-docs/blob/main/config/config_cpp.md)
 
 ---
 
@@ -326,7 +326,7 @@ sunone_aimbot_cpp/
 * [GLFW](https://www.glfw.org/)
 * [WindMouse](https://ben.land/post/2021/04/25/windmouse-human-mouse-movement/)
 * [KMBOX](https://www.kmbox.top/)
-* [Python AI Version](https://github.com/SunOner/sunone_aimbot)
+* [Python AI Version](https://github.com/ExodusTeam/exodus_aimbot)
 
 ---
 
@@ -343,7 +343,7 @@ sunone_aimbot_cpp/
 ---
 ## ❤️ Support the Project & Get Better AI Models
 
-This project is actively developed thanks to the people who support it on [Boosty](https://boosty.to/sunone) and [Patreon](https://www.patreon.com/c/sunone).  
+This project is actively developed thanks to the people who support it on [Boosty](https://boosty.to/exodus) and [Patreon](https://www.patreon.com/c/exodus).  
 **By supporting the project, you get access to improved and better-trained AI models!**
 
 ---
