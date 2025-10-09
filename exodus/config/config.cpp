@@ -112,7 +112,10 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "wind_G = " << cfg.wind_G << "\n"
         << "wind_W = " << cfg.wind_W << "\n"
         << "wind_M = " << cfg.wind_M << "\n"
-        << "wind_D = " << cfg.wind_D << "\n\n";
+        << "wind_D = " << cfg.wind_D << "\n"
+        << "wind_speed_multiplier = " << cfg.wind_speed_multiplier << "\n"
+        << "wind_min_velocity = " << cfg.wind_min_velocity << "\n"
+        << "wind_target_radius = " << cfg.wind_target_radius << "\n\n";
 
     // Mouse shooting
     file << "# Mouse shooting\n"
@@ -259,6 +262,9 @@ bool Config::loadConfig(const std::string& filename)
         wind_W = 5.0f;
         wind_M = 5.0f;
         wind_D = 3.0f;
+        wind_speed_multiplier = 1.0f;
+        wind_min_velocity = 0.0f;
+        wind_target_radius = 1.0f;
 
         // Mouse shooting
         auto_shoot = false;
@@ -544,6 +550,16 @@ bool Config::loadConfig(const std::string& filename)
     wind_W = (float)get_double("wind_W", 5.0f);
     wind_M = (float)get_double("wind_M", 5.0f);
     wind_D = (float)get_double("wind_D", 3.0f);
+    wind_speed_multiplier = (float)get_double("wind_speed_multiplier", 1.0f);
+    wind_min_velocity = (float)get_double("wind_min_velocity", 0.0f);
+    wind_target_radius = (float)get_double("wind_target_radius", 1.0f);
+
+    if (wind_speed_multiplier < 0.1f)
+        wind_speed_multiplier = 0.1f;
+    if (wind_min_velocity < 0.0f)
+        wind_min_velocity = 0.0f;
+    if (wind_target_radius < 0.1f)
+        wind_target_radius = 0.1f;
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);

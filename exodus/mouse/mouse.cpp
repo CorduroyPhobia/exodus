@@ -59,6 +59,10 @@ MouseThread::MouseThread(
     wind_W = config.wind_W;
     wind_M = config.wind_M;
     wind_D = config.wind_D;
+    wind_speed_multiplier = config.wind_speed_multiplier;
+    wind_min_velocity = config.wind_min_velocity;
+    wind_target_radius = config.wind_target_radius;
+    wind_max_step_config = config.wind_M;
 
     moveWorker = std::thread(&MouseThread::moveWorkerLoop, this);
 }
@@ -94,6 +98,10 @@ void MouseThread::updateConfig(
     wind_mouse_enabled = config.wind_mouse_enabled;
     wind_G = config.wind_G; wind_W = config.wind_W;
     wind_M = config.wind_M; wind_D = config.wind_D;
+    wind_speed_multiplier = config.wind_speed_multiplier;
+    wind_min_velocity = config.wind_min_velocity;
+    wind_target_radius = config.wind_target_radius;
+    wind_max_step_config = config.wind_M;
 }
 
 MouseThread::~MouseThread()
@@ -147,9 +155,23 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
     double vx = 0, vy = 0, wX = 0, wY = 0;
     int    cx = 0, cy = 0;
 
-    while (std::hypot(dxF - sx, dyF - sy) >= 1.0)
+    double tolerance = std::max(0.1, static_cast<double>(wind_target_radius));
+    double speedScale = std::max(0.1, static_cast<double>(wind_speed_multiplier));
+    double minSpeed = std::max(0.0, static_cast<double>(wind_min_velocity));
+    double minSpeedClamp = wind_max_step_config > 0.0
+        ? std::min(minSpeed, static_cast<double>(wind_max_step_config))
+        : minSpeed;
+
+    const int maxIterations = 4096;
+    int iterations = 0;
+
+    while (true)
     {
-        double dist = std::hypot(dxF - sx, dyF - sy);
+        double remaining = std::hypot(dxF - sx, dyF - sy);
+        if (remaining < tolerance || iterations++ >= maxIterations)
+            break;
+
+        double dist = remaining;
         double wMag = std::min(wind_W, dist);
 
         if (dist >= wind_D)
@@ -163,15 +185,39 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
             wind_M = wind_M < 3.0 ? ((double)rand() / RAND_MAX) * 3.0 + 3.0 : wind_M / SQRT5;
         }
 
-        vx += wX + wind_G * (dxF - sx) / dist;
-        vy += wY + wind_G * (dyF - sy) / dist;
+        double divisor = dist > 1e-6 ? dist : 1.0;
+        vx += wX + wind_G * (dxF - sx) / divisor;
+        vy += wY + wind_G * (dyF - sy) / divisor;
+
+        vx *= speedScale;
+        vy *= speedScale;
 
         double vMag = std::hypot(vx, vy);
-        if (vMag > wind_M)
+        if (vMag > wind_M && wind_M > 0.0)
         {
             double vClip = wind_M / 2.0 + ((double)rand() / RAND_MAX) * wind_M / 2.0;
-            vx = (vx / vMag) * vClip;
-            vy = (vy / vMag) * vClip;
+            if (vMag > 0.0)
+            {
+                vx = (vx / vMag) * vClip;
+                vy = (vy / vMag) * vClip;
+                vMag = std::hypot(vx, vy);
+            }
+        }
+
+        if (minSpeedClamp > 0.0 && vMag < minSpeedClamp)
+        {
+            if (vMag == 0.0)
+            {
+                double angle = std::atan2(dyF - sy, dxF - sx);
+                vx = std::cos(angle) * minSpeedClamp;
+                vy = std::sin(angle) * minSpeedClamp;
+            }
+            else
+            {
+                double scale = minSpeedClamp / vMag;
+                vx *= scale;
+                vy *= scale;
+            }
         }
 
         sx += vx;  sy += vy;
@@ -184,6 +230,13 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
             queueMove(step_x, step_y);
             cx = rx; cy = ry;
         }
+    }
+
+    int final_x = dx - cx;
+    int final_y = dy - cy;
+    if (final_x || final_y)
+    {
+        queueMove(final_x, final_y);
     }
 }
 

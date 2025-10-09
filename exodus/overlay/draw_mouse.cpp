@@ -24,6 +24,9 @@ float prev_wind_G = config.wind_G;
 float prev_wind_W = config.wind_W;
 float prev_wind_M = config.wind_M;
 float prev_wind_D = config.wind_D;
+float prev_wind_speed_multiplier = config.wind_speed_multiplier;
+float prev_wind_min_velocity = config.wind_min_velocity;
+float prev_wind_target_radius = config.wind_target_radius;
 
 bool prev_auto_shoot = config.auto_shoot;
 float prev_bScope_multiplier = config.bScope_multiplier;
@@ -234,12 +237,36 @@ void draw_mouse()
             config.saveConfig();
         }
 
+        if (ImGui::SliderFloat("Speed multiplier", &config.wind_speed_multiplier, 0.10f, 5.00f, "%.2f"))
+        {
+            if (config.wind_speed_multiplier < 0.10f)
+                config.wind_speed_multiplier = 0.10f;
+            config.saveConfig();
+        }
+
+        if (ImGui::SliderFloat("Minimum speed", &config.wind_min_velocity, 0.00f, 20.00f, "%.2f"))
+        {
+            if (config.wind_min_velocity < 0.0f)
+                config.wind_min_velocity = 0.0f;
+            config.saveConfig();
+        }
+
+        if (ImGui::SliderFloat("Stick radius", &config.wind_target_radius, 0.10f, 5.00f, "%.2f"))
+        {
+            if (config.wind_target_radius < 0.10f)
+                config.wind_target_radius = 0.10f;
+            config.saveConfig();
+        }
+
         if (ImGui::Button("Reset Wind Mouse to default settings"))
         {
             config.wind_G = 18.0f;
             config.wind_W = 15.0f;
             config.wind_M = 10.0f;
             config.wind_D = 8.0f;
+            config.wind_speed_multiplier = 1.0f;
+            config.wind_min_velocity = 0.0f;
+            config.wind_target_radius = 1.0f;
             config.saveConfig();
         }
     }
@@ -290,13 +317,19 @@ void draw_mouse()
         prev_wind_G != config.wind_G ||
         prev_wind_W != config.wind_W ||
         prev_wind_M != config.wind_M ||
-        prev_wind_D != config.wind_D)
+        prev_wind_D != config.wind_D ||
+        prev_wind_speed_multiplier != config.wind_speed_multiplier ||
+        prev_wind_min_velocity != config.wind_min_velocity ||
+        prev_wind_target_radius != config.wind_target_radius)
     {
         prev_wind_mouse_enabled = config.wind_mouse_enabled;
         prev_wind_G = config.wind_G;
         prev_wind_W = config.wind_W;
         prev_wind_M = config.wind_M;
         prev_wind_D = config.wind_D;
+        prev_wind_speed_multiplier = config.wind_speed_multiplier;
+        prev_wind_min_velocity = config.wind_min_velocity;
+        prev_wind_target_radius = config.wind_target_radius;
 
         globalMouseThread->updateConfig(
             config.detection_resolution,

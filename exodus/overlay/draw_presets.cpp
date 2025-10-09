@@ -210,7 +210,10 @@ static void applyPresetSideEffects(const Config& previous)
         previous.wind_G != config.wind_G ||
         previous.wind_W != config.wind_W ||
         previous.wind_M != config.wind_M ||
-        previous.wind_D != config.wind_D;
+        previous.wind_D != config.wind_D ||
+        previous.wind_speed_multiplier != config.wind_speed_multiplier ||
+        previous.wind_min_velocity != config.wind_min_velocity ||
+        previous.wind_target_radius != config.wind_target_radius;
 
     if (mouseConfigChanged && globalMouseThread)
     {

@@ -63,6 +63,9 @@ public:
     float wind_W;
     float wind_M;
     float wind_D;
+    float wind_speed_multiplier;
+    float wind_min_velocity;
+    float wind_target_radius;
 
     // Mouse shooting
     bool auto_shoot;
