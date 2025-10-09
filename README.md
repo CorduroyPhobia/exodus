@@ -85,7 +85,7 @@ If you want to compile the project yourself or modify code, follow these instruc
 * **Windows 10 or 11 (x64)**
 * **Windows SDK 10.0.26100.0** or newer
 * **CMake** ([Download](https://cmake.org/))
-* **OpenCV 4.10.0**
+* **OpenCV 4.10.0** (restored automatically via NuGet; see below for CUDA notes)
 * **\[For CUDA version]**
 
   * [CUDA Toolkit 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive)
@@ -103,7 +103,26 @@ If you want to compile the project yourself or modify code, follow these instruc
 
 ---
 
-## 2. Choose Build Target in Visual Studio
+## 2. Restore NuGet packages
+
+Run a NuGet restore before opening the solution so the prebuilt dependencies are available:
+
+```
+nuget restore exodus.sln
+```
+
+This downloads the OpenCV 4.10.0 SDK and the TensorRT ONNX parser headers/libs into the `packages/` directory. Visual Studio also restores these automatically when you open the solution, but running the command manually ensures the dependencies are present for command-line builds.
+
+If you maintain your own CUDA-enabled OpenCV or custom TensorRT builds, point the build at them by defining the environment variables below before compiling:
+
+* `EXODUS_OPENCV_ROOT` → folder that contains `include/` and `lib/` for your OpenCV build.
+* `EXODUS_TENSORRT_ROOT` → folder that contains `include/` and `lib/` for your TensorRT SDK.
+
+Both variables should end with a trailing slash (e.g. `X:\deps\opencv\`). When set, the build system uses them instead of the NuGet packages.
+
+---
+
+## 3. Choose Build Target in Visual Studio
 
 * **DML (DirectML):**
   Select `Release | x64 | DML` (works on any modern GPU)
@@ -112,7 +131,7 @@ If you want to compile the project yourself or modify code, follow these instruc
 
 ---
 
-## 3. Placement of Third-Party Modules and Libraries
+## 4. Placement of Third-Party Modules and Libraries
 
 Before building the project, **download and place all third-party dependencies** in the following directories inside your project structure:
 
@@ -130,9 +149,8 @@ exodus/
 | --------- | ----------------------------------------------------------------- |
 | SimpleIni | `exodus/exodus/modules/SimpleIni.h`         |
 | serial    | `exodus/exodus/modules/serial/`             |
-| TensorRT  | `exodus/exodus/modules/TensorRT-10.8.0.43/` |
+| TensorRT  | `packages/TensorRT-Parser.10.8.0.43/` *(auto via NuGet)* |
 | GLFW      | `exodus/exodus/modules/glfw-3.4.bin.WIN64/` |
-| OpenCV    | `exodus/exodus/modules/opencv/`             |
 | cuDNN     | `exodus/exodus/modules/cudnn/`              |
 
 * **SimpleIni:**
@@ -152,16 +170,14 @@ exodus/
   * Use the built DLL/LIB with your project.
 
 * **TensorRT:**
-  Download [TensorRT 10.8.0.43](https://developer.nvidia.com/tensorrt/download/10x)
-  Place the folder as shown above.
+  The ONNX parser headers and import libraries restore automatically into `packages/TensorRT-Parser.10.8.0.43/` after running `nuget restore`. If you use NVIDIA's full TensorRT SDK (for CUDA builds), either extract it to a folder referenced by `EXODUS_TENSORRT_ROOT` or copy the contents into the `packages` directory so the include and lib folders sit alongside the NuGet package.
 
 * **GLFW:**
   Download [GLFW Windows binaries](https://www.glfw.org/download.html)
   Place the folder as shown above.
 
 * **OpenCV:**
-  Use your custom build or official DLLs (see CUDA/DML notes below).
-  Place DLLs either next to your exe or in `modules/opencv/`.
+  Headers/libs for the stock CPU build live under `packages/opencv.4.10.0.84/` after a NuGet restore. Copy `opencv_world4100.dll` next to `exodus.exe` for runtime use. If you have a CUDA-enabled build, set `EXODUS_OPENCV_ROOT` to its install folder so the compiler picks up your custom binaries instead of the NuGet package.
 
 * **cuDNN:**
   Place cuDNN files here (for CUDA build):
@@ -171,19 +187,20 @@ exodus/
 
 ```
 exodus/
+├── packages/                     # populated by `nuget restore`
+│   ├── opencv.4.10.0.84/
+│   └── TensorRT-Parser.10.8.0.43/
 └── exodus/
     └── modules/
         ├── SimpleIni.h
         ├── serial/
-        ├── TensorRT-10.8.0.43/
         ├── glfw-3.4.bin.WIN64/
-        ├── opencv/
         └── cudnn/
 ```
 
 ---
 
-## 4. How to Build OpenCV 4.10.0 with CUDA Support (For CUDA Version Only)
+## 5. How to Build OpenCV 4.10.0 with CUDA Support (For CUDA Version Only)
 
 > This section is **only required** if you want to use the CUDA (TensorRT) version and need OpenCV with CUDA support.
 > For DML build, skip this step — you can use the pre-built OpenCV DLL.
@@ -200,13 +217,13 @@ exodus/
 
 2. **Prepare Directories**
 
-   * Create:
-     `exodus/exodus/modules/opencv/`
-     `exodus/exodus/modules/opencv/build`
+   * Create a working directory for the build, for example:
+     `exodus/deps/opencv/`
+     `exodus/deps/opencv/build`
    * Extract `opencv-4.10.0` into
-     `exodus/exodus/modules/opencv/opencv-4.10.0`
+     `exodus/deps/opencv/opencv-4.10.0`
    * Extract `opencv_contrib-4.10.0` into
-     `exodus/exodus/modules/opencv/opencv_contrib-4.10.0`
+     `exodus/deps/opencv/opencv_contrib-4.10.0`
    * Extract cuDNN to
      `exodus/exodus/modules/cudnn`
 
@@ -214,9 +231,9 @@ exodus/
 
    * Open CMake GUI
    * Source code:
-     `exodus/exodus/modules/opencv/opencv-4.10.0`
+     `exodus/deps/opencv/opencv-4.10.0`
    * Build directory:
-     `exodus/exodus/modules/opencv/build`
+     `exodus/deps/opencv/build`
    * Click **Configure**
      (Choose "Visual Studio 17 2022", x64)
 
@@ -238,7 +255,7 @@ exodus/
        Example for RTX 3080-Ti: `8.6`
      * `OPENCV_DNN_CUDA` = ON
      * `OPENCV_EXTRA_MODULES_PATH` =
-       `full_path_to/exodus/exodus/modules/opencv/opencv_contrib-4.10.0/modules`
+       `full_path_to/exodus/deps/opencv/opencv_contrib-4.10.0/modules`
      * `BUILD_opencv_world` = ON
    * Uncheck:
 
@@ -250,40 +267,46 @@ exodus/
 
 5. **Build in Visual Studio**
 
-   * Open `exodus/exodus/modules/opencv/build/OpenCV.sln`
+   * Open `exodus/deps/opencv/build/OpenCV.sln`
      or click "Open Project" in CMake
    * Set build config: **x64 | Release**
    * Build `ALL_BUILD` target (can take up to 2 hours)
    * Then build `INSTALL` target
 
-6. **Copy Resulting DLLs**
+6. **Register the build with Exodus**
 
-   * DLLs:
-     `exodus/exodus/modules/opencv/build/install/x64/vc16/bin/`
-   * LIBs:
-     `exodus/exodus/modules/opencv/build/install/x64/vc16/lib/`
-   * Includes:
-     `exodus/exodus/modules/opencv/build/install/include/opencv2`
-   * Copy needed DLLs (`opencv_world4100.dll`, etc.) next to your project’s executable.
+   * Install output:
+     `exodus/deps/opencv/build/install/x64/vc16/bin/`
+     `exodus/deps/opencv/build/install/x64/vc16/lib/`
+     `exodus/deps/opencv/build/install/include/opencv2`
+   * Copy the required runtime DLLs (for example `opencv_world4100.dll`) next to `exodus.exe`.
+   * Set the environment variable before compiling Exodus:
+
+     ```powershell
+     setx EXODUS_OPENCV_ROOT "X:\full\path\to\exodus\deps\opencv\build\install\"
+     ```
+
+     Remember the trailing slash. After restarting your developer command prompt, the Visual Studio project will automatically prefer your CUDA-enabled build over the NuGet package.
 
 ---
 
-## 5. Notes on OpenCV for CUDA/DML
+## 6. Notes on OpenCV for CUDA/DML
 
 * **For CUDA build (TensorRT backend):**
 
   * You **must** build OpenCV with CUDA support (see the guide above).
-  * Place all built DLLs (e.g., `opencv_world4100.dll`) next to your executable or in the `modules` folder.
+  * Set `EXODUS_OPENCV_ROOT` to the `install/` directory from your build so the project can find the CUDA-enabled headers/libs.
+  * Place the runtime DLLs (e.g., `opencv_world4100.dll`) next to your executable.
 * **For DML build (DirectML backend):**
 
-  * You can use the official pre-built OpenCV DLLs if you **only** plan to use DirectML.
-  * If you want to use both CUDA and DML modes in the same executable, you should always use your custom OpenCV build with CUDA enabled (it will work for both modes).
+  * You can rely on the NuGet-provided OpenCV package (`packages/opencv.4.10.0.84/`).
+  * If you want to ship a single executable that supports both CUDA and DML, prefer your CUDA-enabled build and reuse it for DML by pointing `EXODUS_OPENCV_ROOT` at the same install directory.
 * **Note:**
   If you run the CUDA backend with non-CUDA OpenCV DLLs, the program will not work and may crash due to missing symbols.
 
 ---
 
-## 6. Build and Run
+## 7. Build and Run
 
 1. Open the solution in Visual Studio 2022.
 2. Choose your configuration (`Release | x64 | DML` or `Release | x64 | CUDA`).
