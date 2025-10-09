@@ -144,6 +144,100 @@ bool settingsApproximatelyEqual(const MouseSettings& a, const MouseSettings& b) 
            a.easynorecoil == b.easynorecoil &&
            almostEqual(a.easynorecoilstrength, b.easynorecoilstrength);
 }
+
+float driveTowardsHigh(float current, float minValue, float maxValue, float floorNormalized) {
+    if (maxValue <= minValue + kMinFloatEpsilon) {
+        return clampValue(current, minValue, maxValue);
+    }
+    const float normalized = std::max((current - minValue) / (maxValue - minValue),
+                                      std::clamp(floorNormalized, 0.0f, 1.0f));
+    return clampValue(minValue + normalized * (maxValue - minValue), minValue, maxValue);
+}
+
+float driveTowardsLow(float current, float minValue, float maxValue, float ceilingNormalized) {
+    if (maxValue <= minValue + kMinFloatEpsilon) {
+        return clampValue(current, minValue, maxValue);
+    }
+    const float normalized = std::min((current - minValue) / (maxValue - minValue),
+                                      std::clamp(ceilingNormalized, 0.0f, 1.0f));
+    return clampValue(minValue + normalized * (maxValue - minValue), minValue, maxValue);
+}
+
+MouseSettings applyRageBaiterBias(const MouseSettings& settings,
+                                  const MouseSettings& minBounds,
+                                  const MouseSettings& maxBounds,
+                                  float aggressionFloor) {
+    MouseSettings biased = settings;
+
+    const float highFloor = std::clamp(aggressionFloor, 0.75f, 0.98f);
+    const float midFloor = std::clamp(highFloor - 0.15f, 0.55f, 0.9f);
+    const float precisionCeiling = std::clamp(0.2f - (highFloor - 0.75f) * 0.05f, 0.05f, 0.25f);
+
+    biased.dpi = static_cast<int>(std::round(
+        driveTowardsHigh(static_cast<float>(biased.dpi), static_cast<float>(minBounds.dpi),
+                         static_cast<float>(maxBounds.dpi), highFloor)));
+    biased.sensitivity = driveTowardsHigh(biased.sensitivity, minBounds.sensitivity, maxBounds.sensitivity, highFloor);
+    biased.minSpeedMultiplier = driveTowardsHigh(biased.minSpeedMultiplier,
+                                                minBounds.minSpeedMultiplier,
+                                                maxBounds.minSpeedMultiplier,
+                                                midFloor);
+    biased.maxSpeedMultiplier = driveTowardsHigh(biased.maxSpeedMultiplier,
+                                                std::max(minBounds.maxSpeedMultiplier, biased.minSpeedMultiplier),
+                                                maxBounds.maxSpeedMultiplier,
+                                                highFloor);
+    biased.predictionInterval = driveTowardsLow(biased.predictionInterval,
+                                               minBounds.predictionInterval,
+                                               maxBounds.predictionInterval,
+                                               precisionCeiling);
+    biased.snapRadius = driveTowardsHigh(biased.snapRadius, minBounds.snapRadius, maxBounds.snapRadius, midFloor);
+    biased.nearRadius = driveTowardsHigh(biased.nearRadius, minBounds.nearRadius, maxBounds.nearRadius, highFloor);
+    biased.speedCurveExponent = driveTowardsHigh(biased.speedCurveExponent,
+                                                minBounds.speedCurveExponent,
+                                                maxBounds.speedCurveExponent,
+                                                highFloor);
+    biased.snapBoostFactor = driveTowardsHigh(biased.snapBoostFactor,
+                                             minBounds.snapBoostFactor,
+                                             maxBounds.snapBoostFactor,
+                                             highFloor);
+
+    if (maxBounds.wind_mouse_enabled) {
+        biased.wind_mouse_enabled = true;
+        biased.wind_G = driveTowardsHigh(biased.wind_G, minBounds.wind_G, maxBounds.wind_G, highFloor);
+        biased.wind_W = driveTowardsHigh(biased.wind_W, minBounds.wind_W, maxBounds.wind_W, highFloor);
+        biased.wind_M = driveTowardsHigh(biased.wind_M, minBounds.wind_M, maxBounds.wind_M, highFloor);
+        biased.wind_D = driveTowardsHigh(biased.wind_D, minBounds.wind_D, maxBounds.wind_D, midFloor);
+    }
+
+    if (maxBounds.easynorecoil) {
+        biased.easynorecoil = true;
+        biased.easynorecoilstrength = driveTowardsHigh(biased.easynorecoilstrength,
+                                                       minBounds.easynorecoilstrength,
+                                                       maxBounds.easynorecoilstrength,
+                                                       highFloor);
+    }
+
+    biased.minSpeedMultiplier = clampValue(biased.minSpeedMultiplier,
+                                          minBounds.minSpeedMultiplier,
+                                          maxBounds.minSpeedMultiplier);
+    biased.maxSpeedMultiplier = clampValue(std::max(biased.maxSpeedMultiplier, biased.minSpeedMultiplier),
+                                          std::max(minBounds.maxSpeedMultiplier, biased.minSpeedMultiplier),
+                                          maxBounds.maxSpeedMultiplier);
+    biased.snapRadius = clampValue(biased.snapRadius, minBounds.snapRadius, maxBounds.snapRadius);
+    biased.nearRadius = clampValue(biased.nearRadius, minBounds.nearRadius, maxBounds.nearRadius);
+    biased.snapBoostFactor = clampValue(biased.snapBoostFactor, minBounds.snapBoostFactor, maxBounds.snapBoostFactor);
+    biased.speedCurveExponent = clampValue(biased.speedCurveExponent,
+                                           minBounds.speedCurveExponent,
+                                           maxBounds.speedCurveExponent);
+    biased.wind_G = clampValue(biased.wind_G, minBounds.wind_G, maxBounds.wind_G);
+    biased.wind_W = clampValue(biased.wind_W, minBounds.wind_W, maxBounds.wind_W);
+    biased.wind_M = clampValue(biased.wind_M, minBounds.wind_M, maxBounds.wind_M);
+    biased.wind_D = clampValue(biased.wind_D, minBounds.wind_D, maxBounds.wind_D);
+    biased.easynorecoilstrength = clampValue(biased.easynorecoilstrength,
+                                             minBounds.easynorecoilstrength,
+                                             maxBounds.easynorecoilstrength);
+
+    return biased;
+}
 }
 
 AITuner::AITuner() {
@@ -673,9 +767,13 @@ MouseSettings AITuner::defaultsForMode(AimMode mode) const {
 
 void AITuner::applyModeLocked(AimMode mode) {
     state.currentMode = mode;
-    MouseSettings defaults = defaultsForMode(mode);
-    state.currentSettings = sanitizeSettings(defaults, state.minBounds, state.maxBounds);
-    state.bestSettings = state.currentSettings;
+    MouseSettings defaults = sanitizeSettings(defaultsForMode(mode), state.minBounds, state.maxBounds);
+    if (mode == AimMode::RAGE_BAITER) {
+        defaults = sanitizeSettings(applyRageBaiterBias(defaults, state.minBounds, state.maxBounds, 0.85f),
+                                    state.minBounds, state.maxBounds);
+    }
+    state.currentSettings = defaults;
+    state.bestSettings = defaults;
     state.bestReward = std::numeric_limits<double>::lowest();
     state.calibrating = false;
     state.calibrationSchedule.clear();
@@ -783,6 +881,10 @@ void AITuner::rebuildCalibrationScheduleLocked() {
 
     pushCandidate(defaults);
 
+    if (state.currentMode == AimMode::RAGE_BAITER) {
+        pushCandidate(applyRageBaiterBias(defaults, state.minBounds, state.maxBounds, 0.9f));
+    }
+
     if (state.calibrationBudget == 1) {
         return;
     }
@@ -815,7 +917,17 @@ void AITuner::rebuildCalibrationScheduleLocked() {
         candidate.easynorecoil = (t >= 0.5f) && maxBounds.easynorecoil;
         candidate.easynorecoilstrength = minBounds.easynorecoilstrength +
                                          (maxBounds.easynorecoilstrength - minBounds.easynorecoilstrength) * t;
+        if (state.currentMode == AimMode::RAGE_BAITER) {
+            const float aggression = std::clamp(0.7f + 0.3f * t, 0.75f, 0.98f);
+            candidate = applyRageBaiterBias(candidate, state.minBounds, state.maxBounds, aggression);
+        }
         pushCandidate(candidate);
+    }
+
+    if (state.currentMode == AimMode::RAGE_BAITER) {
+        MouseSettings maxAggression = state.maxBounds;
+        maxAggression.predictionInterval = state.minBounds.predictionInterval;
+        pushCandidate(applyRageBaiterBias(maxAggression, state.minBounds, state.maxBounds, 0.96f));
     }
 }
 
@@ -824,8 +936,14 @@ MouseSettings AITuner::generateExplorationCandidateLocked() {
         return state.currentSettings;
     }
 
-    const float intensity = config.explorationRate * (1.0f + static_cast<float>(config.learningRate));
+    float intensity = config.explorationRate * (1.0f + static_cast<float>(config.learningRate));
+    if (state.currentMode == AimMode::RAGE_BAITER) {
+        intensity = std::min(intensity * 1.5f, intensity + 0.35f);
+    }
     MouseSettings mutated = mutateSettings(state.bestSettings, state.minBounds, state.maxBounds, intensity);
+    if (state.currentMode == AimMode::RAGE_BAITER) {
+        mutated = applyRageBaiterBias(mutated, state.minBounds, state.maxBounds, 0.88f);
+    }
     return sanitizeSettings(mutated, state.minBounds, state.maxBounds);
 }
 
