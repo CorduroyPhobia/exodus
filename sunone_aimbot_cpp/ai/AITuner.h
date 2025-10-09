@@ -45,6 +45,9 @@ public:
     void setTargetRadius(float radius);
     void setAutoCalibrate(bool enabled);
     void setSettingsBounds(const MouseSettings& min, const MouseSettings& max);
+    void setEvaluationWindow(int windowSize);
+    void setCalibrationBudget(int budget);
+    void setHistoryLimit(std::size_t limit);
 
     void startTraining();
     void stopTraining();
@@ -100,6 +103,7 @@ private:
         int evaluationWindow = 12;
         int calibrationBudget = 12;
         std::size_t calibrationIndex = 0;
+        std::size_t historyLimit = 256;
         double evaluationRewardSum = 0.0;
         double lastReward = 0.0;
         double totalReward = 0.0;
@@ -145,6 +149,7 @@ private:
     void rebuildCalibrationScheduleLocked();
     MouseSettings generateExplorationCandidateLocked();
     void trimHistoryLocked();
+    void stopTrainingLocked();
 };
 
 #endif // AI_TUNER_H

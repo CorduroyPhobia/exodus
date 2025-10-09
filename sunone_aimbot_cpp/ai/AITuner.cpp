@@ -53,6 +53,7 @@ AITuner::AITuner() {
     state.minBounds = sanitizeSettings(state.minBounds, state.minBounds, state.maxBounds);
     state.maxBounds = sanitizeSettings(state.maxBounds, state.minBounds, state.maxBounds);
 
+    state.historyLimit = kMaxHistoryEntries;
     state.bestReward = std::numeric_limits<double>::lowest();
     state.totalIterations = config.maxIterations;
     applyModeLocked(state.currentMode);
@@ -106,6 +107,33 @@ void AITuner::setAutoCalibrate(bool enabled) {
             beginEvaluationLocked(state.calibrationSchedule.front());
         }
     }
+}
+
+void AITuner::setEvaluationWindow(int windowSize) {
+    std::lock_guard<std::mutex> lock(mutex);
+    const int clamped = std::max(1, windowSize);
+    state.evaluationWindow = clamped;
+    state.evaluationSamplesCollected = 0;
+    state.evaluationRewardSum = 0.0;
+}
+
+void AITuner::setCalibrationBudget(int budget) {
+    std::lock_guard<std::mutex> lock(mutex);
+    state.calibrationBudget = std::max(1, budget);
+    if (state.trainingActive && state.calibrating) {
+        rebuildCalibrationScheduleLocked();
+        if (!state.calibrationSchedule.empty()) {
+            state.calibrationIndex = std::min<std::size_t>(state.calibrationIndex,
+                                                           state.calibrationSchedule.size() - 1);
+            beginEvaluationLocked(state.calibrationSchedule[state.calibrationIndex]);
+        }
+    }
+}
+
+void AITuner::setHistoryLimit(std::size_t limit) {
+    std::lock_guard<std::mutex> lock(mutex);
+    state.historyLimit = std::max<std::size_t>(1, limit);
+    trimHistoryLocked();
 }
 
 void AITuner::setSettingsBounds(const MouseSettings& min, const MouseSettings& max) {
@@ -187,11 +215,7 @@ void AITuner::startTraining() {
 
 void AITuner::stopTraining() {
     std::lock_guard<std::mutex> lock(mutex);
-    state.trainingActive = false;
-    state.paused = false;
-    state.calibrating = false;
-    state.calibrationSchedule.clear();
-    state.calibrationIndex = 0;
+    stopTrainingLocked();
 }
 
 void AITuner::pauseTraining() {
@@ -244,7 +268,6 @@ void AITuner::provideFeedback(const AimbotTarget& target, double mouseX, double 
     }
 
     const double reward = calculateReward(target, mouseX, mouseY, config.targetRadius);
-    state.iteration = std::min(state.iteration + 1, config.maxIterations);
     state.totalIterations = config.maxIterations;
     state.lastReward = reward;
     state.totalReward += reward;
@@ -545,7 +568,9 @@ void AITuner::applyModeLocked(AimMode mode) {
     state.calibrationSchedule.clear();
     state.calibrationIndex = 0;
     resetStatisticsLocked();
-    beginEvaluationLocked(state.currentSettings);
+    if (state.trainingActive) {
+        beginEvaluationLocked(state.currentSettings);
+    }
 }
 
 void AITuner::resetStatisticsLocked() {
@@ -579,6 +604,7 @@ void AITuner::beginEvaluationLocked(const MouseSettings& candidate, bool clearAc
 void AITuner::finalizeEvaluationLocked(double averageReward) {
     state.evaluationRewardSum = 0.0;
     state.evaluationSamplesCollected = 0;
+    state.lastReward = averageReward;
 
     if (state.calibrating) {
         if (averageReward > state.bestReward + kRewardTolerance ||
@@ -598,12 +624,20 @@ void AITuner::finalizeEvaluationLocked(double averageReward) {
         return;
     }
 
+    state.iteration = std::min(state.iteration + 1, state.totalIterations);
+
     if (state.bestReward == std::numeric_limits<double>::lowest() ||
         averageReward > state.bestReward + kRewardTolerance) {
         state.bestReward = averageReward;
         state.bestSettings = state.currentSettings;
     } else if (averageReward + kRewardTolerance < state.bestReward) {
         beginEvaluationLocked(state.bestSettings);
+        return;
+    }
+
+    if (state.iteration >= state.totalIterations) {
+        stopTrainingLocked();
+        state.currentSettings = state.bestSettings;
         return;
     }
 
@@ -680,14 +714,25 @@ MouseSettings AITuner::generateExplorationCandidateLocked() {
 }
 
 void AITuner::trimHistoryLocked() {
-    if (state.settingsHistory.size() > kMaxHistoryEntries) {
+    const std::size_t limit = std::max<std::size_t>(1, state.historyLimit);
+    if (state.settingsHistory.size() > limit) {
         state.settingsHistory.erase(state.settingsHistory.begin(),
                                     state.settingsHistory.begin() +
-                                    (state.settingsHistory.size() - kMaxHistoryEntries));
+                                        (state.settingsHistory.size() - limit));
     }
-    if (state.rewardHistory.size() > kMaxHistoryEntries) {
+    if (state.rewardHistory.size() > limit) {
         state.rewardHistory.erase(state.rewardHistory.begin(),
                                    state.rewardHistory.begin() +
-                                   (state.rewardHistory.size() - kMaxHistoryEntries));
+                                       (state.rewardHistory.size() - limit));
     }
+}
+
+void AITuner::stopTrainingLocked() {
+    state.trainingActive = false;
+    state.paused = false;
+    state.calibrating = false;
+    state.calibrationSchedule.clear();
+    state.calibrationIndex = 0;
+    state.evaluationRewardSum = 0.0;
+    state.evaluationSamplesCollected = 0;
 }
