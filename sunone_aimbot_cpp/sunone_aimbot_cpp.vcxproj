@@ -14,7 +14,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ai\AITuner.cpp" />
     <ClCompile Include="capture\capture.cpp" />
     <ClCompile Include="capture\capture_utils.cpp" />
     <ClCompile Include="capture\duplication_api_capture.cpp" />
@@ -45,7 +44,6 @@
     <ClCompile Include="mouse\SerialConnection.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
     <ClCompile Include="overlay\draw_ai.cpp" />
-    <ClCompile Include="overlay\draw_ai_tuning.cpp" />
     <ClCompile Include="overlay\draw_buttons.cpp" />
     <ClCompile Include="overlay\draw_capture.cpp" />
     <ClCompile Include="overlay\draw_debug.cpp" />
@@ -61,7 +59,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ai\AITuner.h" />
     <ClInclude Include="capture\capture.h" />
     <ClInclude Include="capture\capture_utils.h" />
     <ClInclude Include="capture\duplication_api_capture.h" />

@@ -17,7 +17,6 @@
 #include "ghub.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
-#include "ai/AITuner.h"
 
 std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
@@ -32,8 +31,6 @@ TrtDetector trt_detector;
 
 DirectMLDetector* dml_detector = nullptr;
 MouseThread* globalMouseThread = nullptr;
-AITuner* globalAITuner = nullptr;
-std::mutex globalAITunerMutex;
 Config config;
 
 GhubMouse* gHub = nullptr;
@@ -250,22 +247,6 @@ void mouseThreadFunction(MouseThread& mouseThread)
             {
                 mouseThread.moveMousePivot(target->pivotX, target->pivotY);
 
-                // Provide feedback to AI tuner
-                if (config.ai_tuning_enabled)
-                {
-                    std::lock_guard<std::mutex> lock(globalAITunerMutex);
-                    if (globalAITuner) {
-                        try {
-                            // Get current mouse position (center of screen)
-                            double mouseX = config.detection_resolution / 2.0;
-                            double mouseY = config.detection_resolution / 2.0;
-                            globalAITuner->provideFeedback(*target, mouseX, mouseY);
-                        } catch (const std::exception& e) {
-                            std::cerr << "[AI Tuner] Error providing feedback: " << e.what() << std::endl;
-                        }
-                    }
-                }
-
                 if (config.auto_shoot)
                 {
                     mouseThread.pressMouse(*target);
@@ -291,41 +272,6 @@ void mouseThreadFunction(MouseThread& mouseThread)
 
         mouseThread.checkAndResetPredictions();
         
-        // Apply AI-tuned settings periodically
-        static auto lastAISettingsUpdate = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-        if (config.ai_tuning_enabled && 
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAISettingsUpdate).count() > 1000) // Update every second
-        {
-            std::lock_guard<std::mutex> lock(globalAITunerMutex);
-            if (globalAITuner) {
-                try {
-                    auto currentSettings = globalAITuner->getCurrentSettings();
-                    mouseThread.applyAISettings(
-                        currentSettings.dpi,
-                        currentSettings.sensitivity,
-                        currentSettings.minSpeedMultiplier,
-                        currentSettings.maxSpeedMultiplier,
-                        currentSettings.predictionInterval,
-                        currentSettings.snapRadius,
-                        currentSettings.nearRadius,
-                        currentSettings.speedCurveExponent,
-                        currentSettings.snapBoostFactor,
-                        currentSettings.wind_mouse_enabled,
-                        currentSettings.wind_G,
-                        currentSettings.wind_W,
-                        currentSettings.wind_M,
-                        currentSettings.wind_D,
-                        currentSettings.easynorecoil,
-                        currentSettings.easynorecoilstrength
-                    );
-                    lastAISettingsUpdate = now;
-                } catch (const std::exception& e) {
-                    std::cerr << "[AI Tuner] Error applying settings: " << e.what() << std::endl;
-                }
-            }
-        }
-
         delete target;
     }
 }
@@ -432,10 +378,6 @@ int main()
 
         globalMouseThread = &mouseThread;
         
-        // Initialize AI Tuner (disabled by default for safety)
-        globalAITuner = nullptr;
-        std::cout << "[MAIN] AI Tuner disabled by default for stability." << std::endl;
-        
         assignInputDevices();
 
         std::vector<std::string> availableModels = getAvailableModels();
@@ -535,13 +477,6 @@ int main()
         {
             delete dml_detector;
             dml_detector = nullptr;
-        }
-
-        if (globalAITuner)
-        {
-            globalAITuner->stopTraining();
-            delete globalAITuner;
-            globalAITuner = nullptr;
         }
 
         return 0;

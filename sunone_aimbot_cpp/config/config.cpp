@@ -50,7 +50,7 @@ bool Config::loadConfig(const std::string& filename)
         // Capture
         capture_method = "duplication_api";
         detection_resolution = 320;
-        capture_fps = 60;
+        capture_fps = 120;
         monitor_idx = 0;
         circle_mask = true;
         capture_borders = true;
@@ -62,39 +62,39 @@ bool Config::loadConfig(const std::string& filename)
         // Target
         disable_headshot = false;
         body_y_offset = 0.15f;
-        head_y_offset = 0.05f;
+        head_y_offset = 1.00f;
         ignore_third_person = false;
         shooting_range_targets = false;
         auto_aim = false;
-        auto_hip_aim = false;
+        auto_hip_aim = true;
 
         // Mouse
         dpi = 800;
         sensitivity = 1.0f;
-        fovX = 106;
-        fovY = 74;
-        minSpeedMultiplier = 0.1f;
-        maxSpeedMultiplier = 0.1f;
+        fovX = 96;
+        fovY = 73;
+        minSpeedMultiplier = 0.19f;
+        maxSpeedMultiplier = 0.20f;
 
         predictionInterval = 0.01f;
-        prediction_futurePositions = 20;
+        prediction_futurePositions = 9;
         draw_futurePositions = true;
 
-        snapRadius = 1.5f;
-        nearRadius = 25.0f;
-        speedCurveExponent = 3.0f;
-        snapBoostFactor = 1.15f;
+        snapRadius = 0.62f;
+        nearRadius = 13.89f;
+        speedCurveExponent = 1.81f;
+        snapBoostFactor = 1.14f;
 
         easynorecoil = false;
         easynorecoilstrength = 0.0f;
         input_method = "WIN32";
 
         // Wind mouse
-        wind_mouse_enabled = false;
-        wind_G = 18.0f;
-        wind_W = 15.0f;
-        wind_M = 10.0f;
-        wind_D = 8.0f;
+        wind_mouse_enabled = true;
+        wind_G = 10.0f;
+        wind_W = 5.0f;
+        wind_M = 5.0f;
+        wind_D = 3.0f;
 
         // Arduino
         arduino_baudrate = 115200;
@@ -113,33 +113,25 @@ bool Config::loadConfig(const std::string& filename)
 
         // Mouse shooting
         auto_shoot = false;
-        bScope_multiplier = 1.0f;
-        auto_shoot_fire_delay_ms = 120.0f;
-        auto_shoot_press_duration_ms = 60.0f;
-        auto_shoot_full_auto_grace_ms = 120.0f;
+        bScope_multiplier = 1.1f;
+        auto_shoot_fire_delay_ms = 139.9f;
+        auto_shoot_press_duration_ms = 98.3f;
+        auto_shoot_full_auto_grace_ms = 180.8f;
 
         // AI
-#ifdef USE_CUDA
-        backend = "TRT";
-#else
         backend = "DML";
-#endif
         dml_device_id = 0;
 
-#ifdef USE_CUDA
-        ai_model = "sunxds_0.5.6.engine";
-#else
-        ai_model = "sunxds_0.5.6.onnx";
-#endif
+        ai_model = "sunxds_0.7.6.onnx";
 
-        confidence_threshold = 0.10f;
-        hip_aim_confidence_threshold = 0.25f;
+        confidence_threshold = 0.50f;
+        hip_aim_confidence_threshold = 0.80f;
         hip_aim_min_box_area = 0.10f;
         nms_threshold = 0.50f;
         max_detections = 100;
 
-        postprocess = "yolo10";
-        batch_size = 1;
+        postprocess = "yolo12";
+        batch_size = 8;
 #ifdef USE_CUDA
         export_enable_fp8 = false;
         export_enable_fp16 = true;
@@ -159,7 +151,7 @@ bool Config::loadConfig(const std::string& filename)
         button_exit = splitString("F2");
         button_pause = splitString("F3");
         button_reload_config = splitString("F4");
-        button_open_overlay = splitString("Home");
+        button_open_overlay = splitString("F5");
         enable_arrows_settings = false;
 
         // Overlay
@@ -180,24 +172,23 @@ bool Config::loadConfig(const std::string& filename)
         class_fire = 9;
         class_third_person = 10;
 
-        // AI Tuning
-        ai_tuning_enabled = false;
-        ai_aim_mode = "aim_assist";
-        ai_learning_rate = 0.01f;
-        ai_exploration_rate = 0.1f;
-        ai_training_iterations = 1000;
-        ai_target_radius = 10.0f;
-        ai_auto_calibrate = true;
-        ai_sensitivity_min = 0.1f;
-        ai_sensitivity_max = 5.0f;
-        ai_dpi_min = 400;
-        ai_dpi_max = 16000;
-
         // Debug
         show_window = true;
+        show_fps = false;
         screenshot_button = splitString("None");
         screenshot_delay = 500;
         verbose = false;
+
+        game_profiles.clear();
+        GameProfile unified{};
+        unified.name = "UNIFIED";
+        unified.sens = 0.54;
+        unified.yaw = 0.02;
+        unified.pitch = 0.02;
+        unified.fovScaled = false;
+        unified.baseFOV = 0.0;
+        game_profiles[unified.name] = unified;
+        active_game = unified.name;
 
         saveConfig(filename);
         return true;
@@ -270,14 +261,15 @@ bool Config::loadConfig(const std::string& filename)
     {
         GameProfile uni;
         uni.name = "UNIFIED";
-        uni.sens = 1.0;
-        uni.yaw = 0.022;
-        uni.pitch = uni.yaw;
+        uni.sens = 0.54;
+        uni.yaw = 0.02;
+        uni.pitch = 0.02;
         uni.fovScaled = false;
         uni.baseFOV = 0.0;
         game_profiles[uni.name] = uni;
     }
 
+    active_game = "UNIFIED";
     active_game = get_string("active_game", active_game);
     if (!game_profiles.count(active_game) && !game_profiles.empty())
         active_game = game_profiles.begin()->first;
@@ -288,7 +280,7 @@ bool Config::loadConfig(const std::string& filename)
     if (detection_resolution != 160 && detection_resolution != 320 && detection_resolution != 640)
         detection_resolution = 320;
 
-    capture_fps = get_long("capture_fps", 60);
+    capture_fps = get_long("capture_fps", 120);
     monitor_idx = get_long("monitor_idx", 0);
     circle_mask = get_bool("circle_mask", true);
     capture_borders = get_bool("capture_borders", true);
@@ -300,39 +292,39 @@ bool Config::loadConfig(const std::string& filename)
     // Target
     disable_headshot = get_bool("disable_headshot", false);
     body_y_offset = (float)get_double("body_y_offset", 0.15);
-    head_y_offset = (float)get_double("head_y_offset", 0.05);
+    head_y_offset = (float)get_double("head_y_offset", 1.00);
     ignore_third_person = get_bool("ignore_third_person", false);
     shooting_range_targets = get_bool("shooting_range_targets", false);
     auto_aim = get_bool("auto_aim", false);
-    auto_hip_aim = get_bool("auto_hip_aim", false);
+    auto_hip_aim = get_bool("auto_hip_aim", true);
 
     // Mouse
     dpi = get_long("dpi", 800);
     sensitivity = (float)get_double("sensitivity", 1.0);
-    fovX = get_long("fovX", 106);
-    fovY = get_long("fovY", 74);
-    minSpeedMultiplier = (float)get_double("minSpeedMultiplier", 0.1);
-    maxSpeedMultiplier = (float)get_double("maxSpeedMultiplier", 0.1);
+    fovX = get_long("fovX", 96);
+    fovY = get_long("fovY", 73);
+    minSpeedMultiplier = (float)get_double("minSpeedMultiplier", 0.19);
+    maxSpeedMultiplier = (float)get_double("maxSpeedMultiplier", 0.20);
 
     predictionInterval = (float)get_double("predictionInterval", 0.01);
-    prediction_futurePositions = get_long("prediction_futurePositions", 20);
+    prediction_futurePositions = get_long("prediction_futurePositions", 9);
     draw_futurePositions = get_bool("draw_futurePositions", true);
     
-    snapRadius = (float)get_double("snapRadius", 1.5);
-    nearRadius = (float)get_double("nearRadius", 25.0);
-    speedCurveExponent = (float)get_double("speedCurveExponent", 3.0);
-    snapBoostFactor = (float)get_double("snapBoostFactor", 1.15);
+    snapRadius = (float)get_double("snapRadius", 0.62);
+    nearRadius = (float)get_double("nearRadius", 13.89);
+    speedCurveExponent = (float)get_double("speedCurveExponent", 1.81);
+    snapBoostFactor = (float)get_double("snapBoostFactor", 1.14);
 
     easynorecoil = get_bool("easynorecoil", false);
     easynorecoilstrength = (float)get_double("easynorecoilstrength", 0.0);
     input_method = get_string("input_method", "WIN32");
 
     // Wind mouse
-    wind_mouse_enabled = get_bool("wind_mouse_enabled", false);
-    wind_G = (float)get_double("wind_G", 18.0f);
-    wind_W = (float)get_double("wind_W", 15.0f);
-    wind_M = (float)get_double("wind_M", 10.0f);
-    wind_D = (float)get_double("wind_D", 8.0f);
+    wind_mouse_enabled = get_bool("wind_mouse_enabled", true);
+    wind_G = (float)get_double("wind_G", 10.0f);
+    wind_W = (float)get_double("wind_W", 5.0f);
+    wind_M = (float)get_double("wind_M", 5.0f);
+    wind_D = (float)get_double("wind_D", 3.0f);
 
     // Arduino
     arduino_baudrate = get_long("arduino_baudrate", 115200);
@@ -351,37 +343,29 @@ bool Config::loadConfig(const std::string& filename)
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
-    bScope_multiplier = (float)get_double("bScope_multiplier", 1.2);
-    auto_shoot_fire_delay_ms = (float)get_double("auto_shoot_fire_delay_ms", 120.0);
+    bScope_multiplier = (float)get_double("bScope_multiplier", 1.1);
+    auto_shoot_fire_delay_ms = (float)get_double("auto_shoot_fire_delay_ms", 139.9);
     if (auto_shoot_fire_delay_ms < 0.0f) auto_shoot_fire_delay_ms = 0.0f;
-    auto_shoot_press_duration_ms = (float)get_double("auto_shoot_press_duration_ms", 60.0);
+    auto_shoot_press_duration_ms = (float)get_double("auto_shoot_press_duration_ms", 98.3);
     if (auto_shoot_press_duration_ms < 0.0f) auto_shoot_press_duration_ms = 0.0f;
-    auto_shoot_full_auto_grace_ms = (float)get_double("auto_shoot_full_auto_grace_ms", 120.0);
+    auto_shoot_full_auto_grace_ms = (float)get_double("auto_shoot_full_auto_grace_ms", 180.8);
     if (auto_shoot_full_auto_grace_ms < 0.0f) auto_shoot_full_auto_grace_ms = 0.0f;
 
     // AI
-#ifdef USE_CUDA
-    backend = get_string("backend", "TRT");
-#else
     backend = get_string("backend", "DML");
-#endif
 
     dml_device_id = get_long("dml_device_id", 0);
 
-#ifdef USE_CUDA
-    ai_model = get_string("ai_model", "sunxds_0.5.6.engine");
-#else
-    ai_model = get_string("ai_model", "sunxds_0.5.6.onnx");
-#endif
-    confidence_threshold = (float)get_double("confidence_threshold", 0.15);
-    hip_aim_confidence_threshold = (float)get_double("hip_aim_confidence_threshold", 0.30);
+    ai_model = get_string("ai_model", "sunxds_0.7.6.onnx");
+    confidence_threshold = (float)get_double("confidence_threshold", 0.50);
+    hip_aim_confidence_threshold = (float)get_double("hip_aim_confidence_threshold", 0.80);
     hip_aim_min_box_area = std::clamp((float)get_double("hip_aim_min_box_area", 0.10), 0.0f, 1.0f);
     nms_threshold = (float)get_double("nms_threshold", 0.50);
-    max_detections = get_long("max_detections", 20);
+    max_detections = get_long("max_detections", 100);
 
-    postprocess = get_string("postprocess", "yolo10");
+    postprocess = get_string("postprocess", "yolo12");
 
-    batch_size = get_long("batch_size", 1);
+    batch_size = get_long("batch_size", 8);
     if (batch_size < 1) batch_size = 1;
     if (batch_size > 8) batch_size = 8;
 
@@ -404,7 +388,7 @@ bool Config::loadConfig(const std::string& filename)
     button_exit = splitString(get_string("button_exit", "F2"));
     button_pause = splitString(get_string("button_pause", "F3"));
     button_reload_config = splitString(get_string("button_reload_config", "F4"));
-    button_open_overlay = splitString(get_string("button_open_overlay", "Home"));
+    button_open_overlay = splitString(get_string("button_open_overlay", "F5"));
     enable_arrows_settings = get_bool("enable_arrows_settings", false);
 
     // Overlay
@@ -425,21 +409,9 @@ bool Config::loadConfig(const std::string& filename)
     class_fire = get_long("class_fire", 9);
     class_third_person = get_long("class_third_person", 10);
 
-    // AI Tuning
-    ai_tuning_enabled = get_bool("ai_tuning_enabled", false);
-    ai_aim_mode = get_string("ai_aim_mode", "aim_assist");
-    ai_learning_rate = (float)get_double("ai_learning_rate", 0.01);
-    ai_exploration_rate = (float)get_double("ai_exploration_rate", 0.1);
-    ai_training_iterations = get_long("ai_training_iterations", 1000);
-    ai_target_radius = (float)get_double("ai_target_radius", 10.0);
-    ai_auto_calibrate = get_bool("ai_auto_calibrate", true);
-    ai_sensitivity_min = (float)get_double("ai_sensitivity_min", 0.1);
-    ai_sensitivity_max = (float)get_double("ai_sensitivity_max", 5.0);
-    ai_dpi_min = get_long("ai_dpi_min", 400);
-    ai_dpi_max = get_long("ai_dpi_max", 16000);
-
     // Debug window
     show_window = get_bool("show_window", true);
+    show_fps = get_bool("show_fps", false);
     screenshot_button = splitString(get_string("screenshot_button", "None"));
     screenshot_delay = get_long("screenshot_delay", 500);
     verbose = get_bool("verbose", false);
