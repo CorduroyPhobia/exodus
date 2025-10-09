@@ -83,6 +83,12 @@ bool Config::loadConfig(const std::string& filename)
         speedCurveExponent = 1.81f;
         snapBoostFactor = 1.14f;
 
+        sens = 0.54;
+        yaw = 0.02;
+        pitch = 0.02;
+        fovScaled = false;
+        baseFOV = 0.0;
+
         easynorecoil = false;
         easynorecoilstrength = 0.0f;
         input_method = "WIN32";
@@ -174,11 +180,6 @@ bool Config::loadConfig(const std::string& filename)
         game_profiles.clear();
         GameProfile unified{};
         unified.name = "UNIFIED";
-        unified.sens = 0.54;
-        unified.yaw = 0.02;
-        unified.pitch = 0.02;
-        unified.fovScaled = false;
-        unified.baseFOV = 0.0;
         game_profiles[unified.name] = unified;
         active_game = unified.name;
 
@@ -216,7 +217,32 @@ bool Config::loadConfig(const std::string& filename)
             return ini.GetDoubleValue("", key, defval);
         };
 
+    bool has_sens_key = ini.GetValue("", "sensitivity", nullptr) != nullptr;
+    bool has_yaw_key = ini.GetValue("", "yaw", nullptr) != nullptr;
+    bool has_pitch_key = ini.GetValue("", "pitch", nullptr) != nullptr;
+    bool has_fov_scaled_key = ini.GetValue("", "fov_scaled", nullptr) != nullptr;
+    bool has_base_fov_key = ini.GetValue("", "base_fov", nullptr) != nullptr;
+
+    sens = get_double("sensitivity", 0.54);
+    yaw = get_double("yaw", 0.02);
+    pitch = get_double("pitch", yaw);
+    fovScaled = get_bool("fov_scaled", false);
+    baseFOV = get_double("base_fov", 0.0);
+
     game_profiles.clear();
+
+    struct LegacyProfileData
+    {
+        double sens = 0.0;
+        double yaw = 0.0;
+        double pitch = 0.0;
+        bool hasPitch = false;
+        bool hasFovScaled = false;
+        bool fovScaled = false;
+        bool hasBaseFOV = false;
+        double baseFOV = 0.0;
+    };
+    std::unordered_map<std::string, LegacyProfileData> legacy_profiles;
 
     CSimpleIniA::TNamesDepend keys;
     ini.GetAllKeys("Games", keys);
@@ -225,26 +251,45 @@ bool Config::loadConfig(const std::string& filename)
     {
         std::string name = k.pItem;
         std::string val = ini.GetValue("Games", k.pItem, "");
+
+        GameProfile gp;
+        gp.name = name;
+        game_profiles[name] = gp;
+
+        if (val.empty())
+            continue;
+
         auto parts = splitString(val, ',');
+        if (parts.size() < 2)
+            continue;
 
         try
         {
-            if (parts.size() < 2)
-                throw std::runtime_error("not enough values");
+            LegacyProfileData legacy;
+            legacy.sens = std::stod(parts[0]);
+            legacy.yaw = std::stod(parts[1]);
+            legacy.pitch = legacy.yaw;
+            if (parts.size() > 2)
+            {
+                legacy.pitch = std::stod(parts[2]);
+                legacy.hasPitch = true;
+            }
+            if (parts.size() > 3)
+            {
+                legacy.hasFovScaled = true;
+                legacy.fovScaled = (parts[3] == "true" || parts[3] == "1");
+            }
+            if (parts.size() > 4)
+            {
+                legacy.baseFOV = std::stod(parts[4]);
+                legacy.hasBaseFOV = true;
+            }
 
-            GameProfile gp;
-            gp.name = name;
-            gp.sens = std::stod(parts[0]);
-            gp.yaw = std::stod(parts[1]);
-            gp.pitch = parts.size() > 2 ? std::stod(parts[2]) : gp.yaw;
-            gp.fovScaled = parts.size() > 3 && (parts[3] == "true" || parts[3] == "1");
-            gp.baseFOV = parts.size() > 4 ? std::stod(parts[4]) : 0.0;
-
-            game_profiles[name] = gp;
+            legacy_profiles[name] = legacy;
         }
         catch (const std::exception& e)
         {
-            std::cerr << "[Config] Failed to parse profile: " << name
+            std::cerr << "[Config] Failed to parse legacy profile: " << name
                 << " = " << val << " (" << e.what() << ")" << std::endl;
         }
     }
@@ -253,11 +298,6 @@ bool Config::loadConfig(const std::string& filename)
     {
         GameProfile uni;
         uni.name = "UNIFIED";
-        uni.sens = 0.54;
-        uni.yaw = 0.02;
-        uni.pitch = 0.02;
-        uni.fovScaled = false;
-        uni.baseFOV = 0.0;
         game_profiles[uni.name] = uni;
     }
 
@@ -265,6 +305,48 @@ bool Config::loadConfig(const std::string& filename)
     active_game = get_string("active_game", active_game);
     if (!game_profiles.count(active_game) && !game_profiles.empty())
         active_game = game_profiles.begin()->first;
+
+    auto legacyLookup = [&](const std::string& key) -> const LegacyProfileData*
+    {
+        auto it = legacy_profiles.find(key);
+        if (it != legacy_profiles.end())
+            return &it->second;
+        return nullptr;
+    };
+
+    const LegacyProfileData* legacy = legacyLookup(active_game);
+    if (!legacy)
+        legacy = legacyLookup("UNIFIED");
+    if (!legacy && !legacy_profiles.empty())
+        legacy = &legacy_profiles.begin()->second;
+
+    if (legacy)
+    {
+        if (!has_sens_key)
+            sens = legacy->sens;
+        if (!has_yaw_key)
+            yaw = legacy->yaw;
+        if (!has_pitch_key)
+        {
+            pitch = legacy->hasPitch ? legacy->pitch : legacy->yaw;
+        }
+        if (!has_fov_scaled_key && legacy->hasFovScaled)
+            fovScaled = legacy->fovScaled;
+        if (!has_base_fov_key && legacy->hasBaseFOV)
+            baseFOV = legacy->baseFOV;
+    }
+
+    if (!fovScaled)
+        pitch = yaw;
+
+    if (sens < 0.0)
+        sens = 0.0;
+    if (yaw < 0.0)
+        yaw = 0.0;
+    if (pitch < 0.0)
+        pitch = 0.0;
+    if (baseFOV < 0.0)
+        baseFOV = 0.0;
 
     // Capture
     capture_method = get_string("capture_method", "duplication_api");
@@ -440,13 +522,21 @@ bool Config::saveConfig(const std::string& filename)
         << "auto_hip_aim = " << (auto_hip_aim ? "true" : "false") << "\n\n";
 
     // Mouse
+    double normalizedPitch = fovScaled ? pitch : yaw;
+
     file << "# Mouse move\n"
         << "fovX = " << fovX << "\n"
         << "fovY = " << fovY << "\n"
         << "minSpeedMultiplier = " << minSpeedMultiplier << "\n"
         << "maxSpeedMultiplier = " << maxSpeedMultiplier << "\n"
+        << std::fixed << std::setprecision(4)
+        << "sensitivity = " << sens << "\n"
+        << "yaw = " << yaw << "\n"
+        << "pitch = " << normalizedPitch << "\n"
+        << "fov_scaled = " << (fovScaled ? "true" : "false") << "\n"
+        << std::setprecision(2)
+        << "base_fov = " << baseFOV << "\n"
 
-        << std::fixed << std::setprecision(2)
         << "predictionInterval = " << predictionInterval << "\n"
         << "prediction_futurePositions = " << prediction_futurePositions << "\n"
         << "draw_futurePositions = " << (draw_futurePositions ? "true" : "false") << "\n"
@@ -566,35 +656,23 @@ bool Config::saveConfig(const std::string& filename)
     file << "[Games]\n";
     for (auto& kv : game_profiles)
     {
-        auto & gp = kv.second;
-        file << gp.name << " = "
-             << gp.sens << "," << gp.yaw;
-        file << "," << gp.pitch;
-        if (gp.fovScaled)
-            file << ",true," << gp.baseFOV;
-        file << "\n";
+        const auto& gp = kv.second;
+        file << gp.name << " = true\n";
     }
 
     file.close();
     return true;
 }
 
-const Config::GameProfile& Config::currentProfile() const
-{
-    auto it = game_profiles.find(active_game);
-    if (it != game_profiles.end()) return it->second;
-    throw std::runtime_error("Active game profile not found: " + active_game);
-}
-
 std::pair<double, double> Config::degToCounts(double degX, double degY, double fovNow) const
 {
-    const auto& gp = currentProfile();
-    double scale = (gp.fovScaled && gp.baseFOV > 1.0) ? (fovNow / gp.baseFOV) : 1.0;
+    double scale = (fovScaled && baseFOV > 1.0) ? (fovNow / baseFOV) : 1.0;
+    double effectivePitch = fovScaled ? pitch : yaw;
 
-    if (gp.sens == 0.0 || gp.yaw == 0.0 || gp.pitch == 0.0)
+    if (sens == 0.0 || yaw == 0.0 || effectivePitch == 0.0)
         return { 0.0, 0.0 };
 
-    double cx = degX / (gp.sens * gp.yaw * scale);
-    double cy = degY / (gp.sens * gp.pitch * scale);
+    double cx = degX / (sens * yaw * scale);
+    double cy = degY / (sens * effectivePitch * scale);
     return { cx, cy };
 }

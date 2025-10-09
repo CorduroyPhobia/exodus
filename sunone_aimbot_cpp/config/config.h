@@ -45,6 +45,12 @@ public:
     float speedCurveExponent;
     float snapBoostFactor;
 
+    double sens;
+    double yaw;
+    double pitch;
+    bool   fovScaled;
+    double baseFOV;
+
     bool easynorecoil;
     float easynorecoilstrength;
     std::string input_method; // "WIN32", "GHUB", "ARDUINO", "KMBOX_B", "KMBOX_NET"
@@ -132,17 +138,11 @@ public:
     struct GameProfile
     {
         std::string name;
-        double sens;
-        double yaw;
-        double pitch;
-        bool fovScaled;
-        double baseFOV;
     };
 
     std::unordered_map<std::string, GameProfile> game_profiles;
     std::string                                  active_game;
 
-    const GameProfile & currentProfile() const;
     std::pair<double, double> degToCounts(double degX, double degY, double fovNow) const;
 
     bool loadConfig(const std::string& filename = "config.ini");

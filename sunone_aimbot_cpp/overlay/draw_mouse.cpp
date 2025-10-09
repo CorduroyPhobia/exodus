@@ -178,49 +178,54 @@ void draw_mouse()
         input_method_changed.store(true);
     }
 
-    const auto& gp = config.currentProfile();
+    ImGui::Text("Current profile: %s", config.active_game.c_str());
 
-    ImGui::Text("Current profile: %s", gp.name.c_str());
-    ImGui::Text("Sens: %.4f", gp.sens);
-    ImGui::Text("Yaw:  %.4f", gp.yaw);
-    ImGui::Text("Pitch: %.4f", gp.pitch);
-    ImGui::Text("FOV Scaled: %s", gp.fovScaled ? "true" : "false");
+    ImGui::SeparatorText("Mouse Sensitivity");
 
-    if (gp.name != "UNIFIED")
+    float sens_f = static_cast<float>(config.sens);
+    float yaw_f = static_cast<float>(config.yaw);
+    float pitch_f = static_cast<float>(config.fovScaled ? config.pitch : config.yaw);
+    float baseFOV_f = static_cast<float>(config.baseFOV);
+    bool fov_scaled = config.fovScaled;
+
+    bool sens_changed = false;
+    sens_changed |= ImGui::SliderFloat("Sensitivity", &sens_f, 0.001f, 10.0f, "%.4f");
+    sens_changed |= ImGui::SliderFloat("Yaw", &yaw_f, 0.001f, 0.1f, "%.4f");
+
+    if (!fov_scaled)
+        ImGui::BeginDisabled(true);
+    sens_changed |= ImGui::SliderFloat("Pitch", &pitch_f, 0.001f, 0.1f, "%.4f");
+    if (!fov_scaled)
+        ImGui::EndDisabled();
+
+    sens_changed |= ImGui::Checkbox("FOV Scaled", &fov_scaled);
+
+    if (!fov_scaled)
     {
-        Config::GameProfile& modifiable = config.game_profiles[gp.name];
-        bool changed = false;
+        float display_base = baseFOV_f <= 0.0f ? 90.0f : baseFOV_f;
+        ImGui::BeginDisabled(true);
+        ImGui::SliderFloat("Base FOV", &display_base, 10.0f, 180.0f, "%.1f");
+        ImGui::EndDisabled();
+    }
+    else
+    {
+        sens_changed |= ImGui::SliderFloat("Base FOV", &baseFOV_f, 10.0f, 180.0f, "%.1f");
+    }
 
-        float sens_f = static_cast<float>(modifiable.sens);
-        float yaw_f = static_cast<float>(modifiable.yaw);
-        float pitch_f = static_cast<float>(modifiable.pitch);
-        float baseFOV_f = static_cast<float>(modifiable.baseFOV);
+    if (sens_changed)
+    {
+        config.sens = static_cast<double>(sens_f);
+        config.yaw = static_cast<double>(yaw_f);
+        config.fovScaled = fov_scaled;
+        if (config.fovScaled)
+            config.pitch = static_cast<double>(pitch_f);
+        else
+            config.pitch = config.yaw;
+        if (config.fovScaled)
+            config.baseFOV = static_cast<double>(baseFOV_f);
 
-        changed |= ImGui::SliderFloat("Sensitivity", &sens_f, 0.001f, 10.0f, "%.4f");
-        changed |= ImGui::SliderFloat("Yaw", &yaw_f, 0.001f, 0.1f, "%.4f");
-        changed |= ImGui::SliderFloat("Pitch", &pitch_f, 0.001f, 0.1f, "%.4f");
-
-        changed |= ImGui::Checkbox("FOV Scaled", &modifiable.fovScaled);
-        if (modifiable.fovScaled)
-        {
-            changed |= ImGui::SliderFloat("Base FOV", &baseFOV_f, 10.0f, 180.0f, "%.1f");
-        }
-
-        if (changed)
-        {
-            modifiable.sens = static_cast<double>(sens_f);
-            modifiable.yaw = static_cast<double>(yaw_f);
-
-            if (gp.pitch == 0.0 || !gp.fovScaled)
-                modifiable.pitch = modifiable.yaw;
-            else
-                modifiable.pitch = static_cast<double>(pitch_f);
-
-            modifiable.baseFOV = static_cast<double>(baseFOV_f);
-
-            config.saveConfig();
-            input_method_changed.store(true);
-        }
+        config.saveConfig();
+        input_method_changed.store(true);
     }
 
     ImGui::SeparatorText("Manage Profiles");
@@ -235,11 +240,6 @@ void draw_mouse()
         {
             Config::GameProfile gp;
             gp.name = name;
-            gp.sens = 1.0;
-            gp.yaw = 0.022;
-            gp.pitch = 0.022;
-            gp.fovScaled = false;
-            gp.baseFOV = 90.0;
             config.game_profiles[name] = gp;
             config.active_game = name;
             config.saveConfig();
@@ -248,12 +248,13 @@ void draw_mouse()
         }
     }
 
-    if (gp.name != "UNIFIED")
+    if (config.active_game != "UNIFIED")
     {
         ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(200, 50, 50, 255));
         if (ImGui::Button("Delete Current Profile"))
         {
-            config.game_profiles.erase(gp.name);
+            std::string to_remove = config.active_game;
+            config.game_profiles.erase(to_remove);
             if (!config.game_profiles.empty())
                 config.active_game = config.game_profiles.begin()->first;
             else
