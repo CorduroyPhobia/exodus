@@ -120,6 +120,8 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
     // Mouse shooting
     file << "# Mouse shooting\n"
         << "auto_shoot = " << (cfg.auto_shoot ? "true" : "false") << "\n"
+        << "auto_shoot_hold_until_off_target = " << (cfg.auto_shoot_hold_until_off_target ? "true" : "false") << "\n"
+        << "auto_shoot_with_auto_hip_aim = " << (cfg.auto_shoot_with_auto_hip_aim ? "true" : "false") << "\n"
         << std::fixed << std::setprecision(1)
         << "bScope_multiplier = " << cfg.bScope_multiplier << "\n"
         << "auto_shoot_fire_delay_ms = " << cfg.auto_shoot_fire_delay_ms << "\n"
@@ -268,6 +270,8 @@ bool Config::loadConfig(const std::string& filename)
 
         // Mouse shooting
         auto_shoot = false;
+        auto_shoot_hold_until_off_target = false;
+        auto_shoot_with_auto_hip_aim = false;
         bScope_multiplier = 1.1f;
         auto_shoot_fire_delay_ms = 139.9f;
         auto_shoot_press_duration_ms = 98.3f;
@@ -563,6 +567,8 @@ bool Config::loadConfig(const std::string& filename)
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
+    auto_shoot_hold_until_off_target = get_bool("auto_shoot_hold_until_off_target", false);
+    auto_shoot_with_auto_hip_aim = get_bool("auto_shoot_with_auto_hip_aim", false);
     bScope_multiplier = (float)get_double("bScope_multiplier", 1.1);
     auto_shoot_fire_delay_ms = (float)get_double("auto_shoot_fire_delay_ms", 139.9);
     if (auto_shoot_fire_delay_ms < 0.0f) auto_shoot_fire_delay_ms = 0.0f;

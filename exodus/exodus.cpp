@@ -97,6 +97,7 @@ void handleEasyNoRecoil(MouseThread& mouseThread)
 void mouseThreadFunction(MouseThread& mouseThread)
 {
     int lastVersion = -1;
+    bool previousAutoShootActive = false;
 
     while (!shouldExit)
     {
@@ -126,6 +127,7 @@ void mouseThreadFunction(MouseThread& mouseThread)
                     config.maxSpeedMultiplier,
                     config.predictionInterval,
                     config.auto_shoot,
+                    config.auto_shoot_hold_until_off_target,
                     config.bScope_multiplier,
                     config.auto_shoot_fire_delay_ms,
                     config.auto_shoot_press_duration_ms,
@@ -137,7 +139,9 @@ void mouseThreadFunction(MouseThread& mouseThread)
 
         bool overlayPause = config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire);
         bool aimingActive = aiming.load(std::memory_order_relaxed);
+        bool hipActive = hipAiming.load(std::memory_order_relaxed);
         bool canMoveMouse = aimingActive && !overlayPause;
+        bool autoShootActive = config.auto_shoot || (config.auto_shoot_with_auto_hip_aim && hipActive);
 
         AimbotTarget* target = sortTargets(
             boxes,
@@ -167,25 +171,28 @@ void mouseThreadFunction(MouseThread& mouseThread)
             mouseThread.setTargetDetected(false);
         }
 
-        if (canMoveMouse && target)
+        if (autoShootActive)
         {
-            if (config.auto_shoot)
+            if (canMoveMouse && target)
             {
                 mouseThread.pressMouse(*target);
             }
-        }
-        else
-        {
-            if (config.auto_shoot)
+            else
             {
                 mouseThread.releaseMouse();
             }
+        }
+        else if (previousAutoShootActive)
+        {
+            mouseThread.releaseMouse();
         }
 
         if (overlayPause)
         {
             mouseThread.releaseMouse();
         }
+
+        previousAutoShootActive = autoShootActive;
 
         handleEasyNoRecoil(mouseThread);
 
@@ -292,6 +299,7 @@ int main()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,

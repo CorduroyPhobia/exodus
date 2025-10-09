@@ -30,6 +30,7 @@ private:
     double center_x;
     double center_y;
     bool   auto_shoot;
+    bool   auto_shoot_hold_until_off_target;
     float  bScope_multiplier;
     double auto_shoot_fire_delay_ms;
     double auto_shoot_press_duration_ms;
@@ -89,6 +90,7 @@ public:
         double maxSpeedMultiplier,
         double predictionInterval,
         bool auto_shoot,
+        bool auto_shoot_hold_until_off_target,
         float bScope_multiplier,
         double auto_shoot_fire_delay_ms,
         double auto_shoot_press_duration_ms,
@@ -104,6 +106,7 @@ public:
         double maxSpeedMultiplier,
         double predictionInterval,
         bool auto_shoot,
+        bool auto_shoot_hold_until_off_target,
         float bScope_multiplier,
         double auto_shoot_fire_delay_ms,
         double auto_shoot_press_duration_ms,

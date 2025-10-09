@@ -29,6 +29,8 @@ float prev_wind_min_velocity = config.wind_min_velocity;
 float prev_wind_target_radius = config.wind_target_radius;
 
 bool prev_auto_shoot = config.auto_shoot;
+bool prev_auto_shoot_hold_until_off_target = config.auto_shoot_hold_until_off_target;
+bool prev_auto_shoot_with_auto_hip_aim = config.auto_shoot_with_auto_hip_aim;
 float prev_bScope_multiplier = config.bScope_multiplier;
 float prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
 float prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
@@ -199,13 +201,32 @@ void draw_mouse()
     ImGui::SeparatorText("Auto Shoot");
 
     ImGui::Checkbox("Auto Shoot", &config.auto_shoot);
-    if (config.auto_shoot)
+    ImGui::Checkbox("Auto Shoot During Auto Hip-Aim", &config.auto_shoot_with_auto_hip_aim);
+
+    const bool autoShootConfigured = config.auto_shoot || config.auto_shoot_with_auto_hip_aim;
+    if (autoShootConfigured)
     {
+        ImGui::Checkbox("Hold Trigger Until Target Lost", &config.auto_shoot_hold_until_off_target);
         ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.5f, 2.0f, "%.1f");
         ImGui::SliderFloat("Shot Delay (ms)", &config.auto_shoot_fire_delay_ms, 0.0f, 500.0f, "%.0f");
+
+        if (config.auto_shoot_hold_until_off_target)
+        {
+            ImGui::BeginDisabled();
+        }
+
         ImGui::SliderFloat("Shot Hold (ms)", &config.auto_shoot_press_duration_ms, 0.0f, 200.0f, "%.0f");
         ImGui::SliderFloat("Full Auto Grace (ms)", &config.auto_shoot_full_auto_grace_ms, 0.0f, 400.0f, "%.0f");
-        ImGui::TextDisabled("Set Hold to 0 to keep the trigger down while a target stays in scope.");
+
+        if (config.auto_shoot_hold_until_off_target)
+        {
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("Trigger stays held until the aim leaves the target.");
+        }
+        else
+        {
+            ImGui::TextDisabled("Set Hold to 0 to keep the trigger down while a target stays in scope.");
+        }
     }
 
     ImGui::SeparatorText("Wind mouse");
@@ -305,6 +326,7 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
@@ -339,6 +361,7 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
@@ -348,12 +371,16 @@ void draw_mouse()
     }
 
     if (prev_auto_shoot != config.auto_shoot ||
+        prev_auto_shoot_hold_until_off_target != config.auto_shoot_hold_until_off_target ||
+        prev_auto_shoot_with_auto_hip_aim != config.auto_shoot_with_auto_hip_aim ||
         prev_bScope_multiplier != config.bScope_multiplier ||
         prev_auto_shoot_fire_delay_ms != config.auto_shoot_fire_delay_ms ||
         prev_auto_shoot_press_duration_ms != config.auto_shoot_press_duration_ms ||
         prev_auto_shoot_full_auto_grace_ms != config.auto_shoot_full_auto_grace_ms)
     {
         prev_auto_shoot = config.auto_shoot;
+        prev_auto_shoot_hold_until_off_target = config.auto_shoot_hold_until_off_target;
+        prev_auto_shoot_with_auto_hip_aim = config.auto_shoot_with_auto_hip_aim;
         prev_bScope_multiplier = config.bScope_multiplier;
         prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
         prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
@@ -367,6 +394,7 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,

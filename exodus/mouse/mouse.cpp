@@ -22,6 +22,7 @@ MouseThread::MouseThread(
     double maxSpeedMultiplier,
     double predictionInterval,
     bool auto_shoot,
+    bool auto_shoot_hold_until_off_target,
     float bScope_multiplier,
     double auto_shoot_fire_delay_ms,
     double auto_shoot_press_duration_ms,
@@ -37,6 +38,7 @@ MouseThread::MouseThread(
     center_x(resolution / 2.0),
     center_y(resolution / 2.0),
     auto_shoot(auto_shoot),
+    auto_shoot_hold_until_off_target(auto_shoot_hold_until_off_target),
     bScope_multiplier(bScope_multiplier),
     auto_shoot_fire_delay_ms(std::max(0.0, auto_shoot_fire_delay_ms)),
     auto_shoot_press_duration_ms(std::max(0.0, auto_shoot_press_duration_ms)),
@@ -75,6 +77,7 @@ void MouseThread::updateConfig(
     double maxSpeedMultiplier,
     double predictionInterval,
     bool auto_shoot,
+    bool auto_shoot_hold_until_off_target,
     float bScope_multiplier,
     double auto_shoot_fire_delay_ms,
     double auto_shoot_press_duration_ms,
@@ -87,6 +90,7 @@ void MouseThread::updateConfig(
     max_speed_multiplier = maxSpeedMultiplier;
     prediction_interval = predictionInterval;
     this->auto_shoot = auto_shoot;
+    this->auto_shoot_hold_until_off_target = auto_shoot_hold_until_off_target;
     this->bScope_multiplier = bScope_multiplier;
     this->auto_shoot_fire_delay_ms = std::max(0.0, auto_shoot_fire_delay_ms);
     this->auto_shoot_press_duration_ms = std::max(0.0, auto_shoot_press_duration_ms);
@@ -517,7 +521,7 @@ void MouseThread::pressMouse(const AimbotTarget& target)
                 last_press_time = now;
             }
         }
-        else if (auto_shoot_press_duration_ms > 0.0)
+        else if (!auto_shoot_hold_until_off_target && auto_shoot_press_duration_ms > 0.0)
         {
             double held = std::chrono::duration<double, std::milli>(now - last_press_time).count();
             if (held >= auto_shoot_press_duration_ms)
@@ -530,6 +534,14 @@ void MouseThread::pressMouse(const AimbotTarget& target)
     }
     else if (mouse_pressed)
     {
+        if (auto_shoot_hold_until_off_target)
+        {
+            sendMouseRelease();
+            mouse_pressed = false;
+            last_release_time = now;
+            return;
+        }
+
         double held = std::chrono::duration<double, std::milli>(now - last_press_time).count();
         double sinceScope = std::chrono::duration<double, std::milli>(now - last_in_scope_time).count();
 

@@ -69,6 +69,8 @@ public:
 
     // Mouse shooting
     bool auto_shoot;
+    bool auto_shoot_hold_until_off_target;
+    bool auto_shoot_with_auto_hip_aim;
     float bScope_multiplier;
     float auto_shoot_fire_delay_ms;
     float auto_shoot_press_duration_ms;
