@@ -45,6 +45,39 @@ std::atomic<bool> show_window_changed(false);
 std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
 
+static void ensureActivePresetLoaded()
+{
+    if (config.active_preset.empty())
+        return;
+
+    std::filesystem::path presetPath = config.activePresetPath();
+    if (presetPath.empty())
+        return;
+
+    std::error_code ec;
+    if (!std::filesystem::exists(presetPath, ec))
+    {
+        std::cerr << "[Config] Active preset not found: " << presetPath << std::endl;
+        config.active_preset.clear();
+        config.saveConfig();
+        return;
+    }
+
+    Config previous = config;
+    std::string storedIdentifier = config.active_preset;
+    if (!config.loadConfig(presetPath.string()))
+    {
+        std::cerr << "[Config] Failed to load active preset: " << presetPath << std::endl;
+        config = previous;
+        config.active_preset.clear();
+        config.saveConfig();
+        return;
+    }
+
+    config.active_preset = storedIdentifier;
+    config.saveConfig();
+}
+
 void handleEasyNoRecoil(MouseThread& mouseThread)
 {
     if (config.easynorecoil && shooting.load() && zooming.load())
@@ -215,6 +248,8 @@ int main()
             std::cin.get();
             return -1;
         }
+
+        ensureActivePresetLoaded();
 
         if (config.capture_method == "virtual_camera")
         {

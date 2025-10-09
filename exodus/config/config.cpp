@@ -168,6 +168,10 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "overlay_ui_scale = " << cfg.overlay_ui_scale << "\n"
         << "pause_when_overlay_open = " << (cfg.pause_when_overlay_open ? "true" : "false") << "\n\n";
 
+    // Presets
+    file << "# Presets\n"
+        << "active_preset = " << cfg.active_preset << "\n\n";
+
     // Custom Classes
     file << "# Custom Classes\n"
         << "class_player = " << cfg.class_player << "\n"
@@ -596,6 +600,9 @@ bool Config::loadConfig(const std::string& filename)
     overlay_ui_scale = (float)get_double("overlay_ui_scale", 1.0);
     pause_when_overlay_open = get_bool("pause_when_overlay_open", true);
 
+    // Presets
+    active_preset = get_string("active_preset", "");
+
     // Custom Classes
     class_player = get_long("class_player", 0);
     class_bot = get_long("class_bot", 1);
@@ -653,4 +660,16 @@ std::pair<double, double> Config::degToCounts(double degX, double degY, double f
     double cx = degX / (sens * yaw * scale);
     double cy = degY / (sens * effectivePitch * scale);
     return { cx, cy };
+}
+
+std::filesystem::path Config::activePresetPath() const
+{
+    if (active_preset.empty())
+        return {};
+
+    std::filesystem::path path(active_preset);
+    if (path.is_absolute())
+        return path;
+
+    return std::filesystem::current_path() / "presets" / path;
 }

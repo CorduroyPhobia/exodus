@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <utility>
+#include <filesystem>
 
 class Config
 {
@@ -107,6 +108,9 @@ public:
     float overlay_ui_scale;
     bool pause_when_overlay_open;
 
+    // Presets
+    std::string active_preset;
+
     // Custom Classes
     int class_player;                  // 0
     int class_bot;                     // 1
@@ -137,6 +141,8 @@ public:
     bool savePreset(const std::string& filename, const std::string& presetName) const;
 
     std::string joinStrings(const std::vector<std::string>& vec, const std::string& delimiter = ",") const;
+
+    std::filesystem::path activePresetPath() const;
 private:
     std::vector<std::string> splitString(const std::string& str, char delimiter = ',');
 };

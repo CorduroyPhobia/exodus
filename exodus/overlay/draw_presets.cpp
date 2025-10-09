@@ -147,6 +147,20 @@ static void refreshPresetEntries()
             }
         }
     }
+
+    if (gSelectedPreset == -1 && !config.active_preset.empty())
+    {
+        std::filesystem::path activePath = config.activePresetPath();
+        for (size_t i = 0; i < gPresetEntries.size(); ++i)
+        {
+            if (std::filesystem::equivalent(gPresetEntries[i].path, activePath, ec) ||
+                gPresetEntries[i].path.filename().string() == config.active_preset)
+            {
+                gSelectedPreset = static_cast<int>(i);
+                break;
+            }
+        }
+    }
 }
 
 static std::filesystem::path presetPathForName(const std::string& name)
@@ -354,6 +368,7 @@ void draw_presets()
             Config previous = config;
             if (config.loadConfig(entry.path.string()))
             {
+                config.active_preset = entry.path.filename().string();
                 applyPresetSideEffects(previous);
                 config.saveConfig();
                 gStatusMessage = "Loaded preset '" + entry.displayName + "'.";
@@ -369,11 +384,27 @@ void draw_presets()
         ImGui::SameLine();
         if (ImGui::Button("Delete Preset"))
         {
+            bool wasActive = false;
+            if (!config.active_preset.empty())
+            {
+                std::error_code activeEc;
+                std::filesystem::path activePath = config.activePresetPath();
+                if ((!activePath.empty() && std::filesystem::equivalent(activePath, entry.path, activeEc)) ||
+                    entry.path.filename().string() == config.active_preset)
+                {
+                    wasActive = true;
+                }
+            }
             std::error_code ec;
             if (std::filesystem::remove(entry.path, ec))
             {
                 gStatusMessage = "Deleted preset '" + entry.displayName + "'.";
                 gStatusIsError = false;
+                if (wasActive)
+                {
+                    config.active_preset.clear();
+                    config.saveConfig();
+                }
             }
             else
             {
