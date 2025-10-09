@@ -26,6 +26,7 @@
     <ClCompile Include="overlay\draw_target.cpp" />
     <ClCompile Include="overlay\draw_mouse.cpp" />
     <ClCompile Include="overlay\draw_ai.cpp" />
+    <ClCompile Include="overlay\draw_presets.cpp" />
     <ClCompile Include="overlay\draw_buttons.cpp" />
     <ClCompile Include="overlay\draw_overlay.cpp" />
     <ClCompile Include="overlay\draw_debug.cpp" />

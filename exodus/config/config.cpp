@@ -30,7 +30,7 @@ std::vector<std::string> Config::splitString(const std::string& str, char delimi
     return tokens;
 }
 
-std::string Config::joinStrings(const std::vector<std::string>& vec, const std::string& delimiter)
+std::string Config::joinStrings(const std::vector<std::string>& vec, const std::string& delimiter) const
 {
     std::ostringstream oss;
     for (size_t i = 0; i < vec.size(); ++i)
@@ -39,6 +39,160 @@ std::string Config::joinStrings(const std::vector<std::string>& vec, const std::
         oss << vec[i];
     }
     return oss.str();
+}
+
+static void writeConfigToStream(std::ostream& file, const Config& cfg, const std::string* presetName)
+{
+    file << "# An explanation of the options can be found at:\n";
+    file << "# https://github.com/ExodusTeam/exodus-docs/blob/main/config/config_cpp.md\n";
+    if (presetName)
+    {
+        file << "# Preset name = " << *presetName << "\n";
+    }
+    file << "\n";
+
+    // Capture
+    file << "# Capture\n"
+        << "capture_method = " << cfg.capture_method << "\n"
+        << "detection_resolution = " << cfg.detection_resolution << "\n"
+        << "capture_fps = " << cfg.capture_fps << "\n"
+        << "monitor_idx = " << cfg.monitor_idx << "\n"
+        << "circle_mask = " << (cfg.circle_mask ? "true" : "false") << "\n"
+        << "capture_borders = " << (cfg.capture_borders ? "true" : "false") << "\n"
+        << "capture_cursor = " << (cfg.capture_cursor ? "true" : "false") << "\n"
+        << "virtual_camera_name = " << cfg.virtual_camera_name << "\n"
+        << "virtual_camera_width = " << cfg.virtual_camera_width << "\n"
+        << "virtual_camera_heigth = " << cfg.virtual_camera_heigth << "\n\n";
+
+    // Target
+    file << "# Target\n"
+        << "disable_headshot = " << (cfg.disable_headshot ? "true" : "false") << "\n"
+        << std::fixed << std::setprecision(2)
+        << "body_y_offset = " << cfg.body_y_offset << "\n"
+        << "head_y_offset = " << cfg.head_y_offset << "\n"
+        << "body_distance_compensation = " << cfg.body_distance_compensation << "\n"
+        << "head_distance_compensation = " << cfg.head_distance_compensation << "\n"
+        << "ignore_third_person = " << (cfg.ignore_third_person ? "true" : "false") << "\n"
+        << "shooting_range_targets = " << (cfg.shooting_range_targets ? "true" : "false") << "\n"
+        << "auto_aim = " << (cfg.auto_aim ? "true" : "false") << "\n"
+        << "auto_hip_aim = " << (cfg.auto_hip_aim ? "true" : "false") << "\n\n";
+
+    // Mouse
+    double normalizedPitch = cfg.fovScaled ? cfg.pitch : cfg.yaw;
+
+    file << "# Mouse move\n"
+        << "fovX = " << cfg.fovX << "\n"
+        << "fovY = " << cfg.fovY << "\n"
+        << "minSpeedMultiplier = " << cfg.minSpeedMultiplier << "\n"
+        << "maxSpeedMultiplier = " << cfg.maxSpeedMultiplier << "\n"
+        << std::fixed << std::setprecision(4)
+        << "sensitivity = " << cfg.sens << "\n"
+        << "yaw = " << cfg.yaw << "\n"
+        << "pitch = " << normalizedPitch << "\n"
+        << "fov_scaled = " << (cfg.fovScaled ? "true" : "false") << "\n"
+        << std::setprecision(2)
+        << "base_fov = " << cfg.baseFOV << "\n"
+
+        << "predictionInterval = " << cfg.predictionInterval << "\n"
+        << "prediction_futurePositions = " << cfg.prediction_futurePositions << "\n"
+        << "draw_futurePositions = " << (cfg.draw_futurePositions ? "true" : "false") << "\n"
+
+        << "snapRadius = " << cfg.snapRadius << "\n"
+        << "nearRadius = " << cfg.nearRadius << "\n"
+        << "speedCurveExponent = " << cfg.speedCurveExponent << "\n"
+        << "snapBoostFactor = " << cfg.snapBoostFactor << "\n"
+
+        << "easynorecoil = " << (cfg.easynorecoil ? "true" : "false") << "\n"
+        << std::fixed << std::setprecision(1)
+        << "easynorecoilstrength = " << cfg.easynorecoilstrength << "\n\n";
+
+    // Wind mouse
+    file << "# Wind mouse\n"
+        << "wind_mouse_enabled = " << (cfg.wind_mouse_enabled ? "true" : "false") << "\n"
+        << "wind_G = " << cfg.wind_G << "\n"
+        << "wind_W = " << cfg.wind_W << "\n"
+        << "wind_M = " << cfg.wind_M << "\n"
+        << "wind_D = " << cfg.wind_D << "\n\n";
+
+    // Mouse shooting
+    file << "# Mouse shooting\n"
+        << "auto_shoot = " << (cfg.auto_shoot ? "true" : "false") << "\n"
+        << std::fixed << std::setprecision(1)
+        << "bScope_multiplier = " << cfg.bScope_multiplier << "\n"
+        << "auto_shoot_fire_delay_ms = " << cfg.auto_shoot_fire_delay_ms << "\n"
+        << "auto_shoot_press_duration_ms = " << cfg.auto_shoot_press_duration_ms << "\n"
+        << "auto_shoot_full_auto_grace_ms = " << cfg.auto_shoot_full_auto_grace_ms << "\n\n";
+
+    // AI
+    file << "# AI\n"
+        << "backend = " << cfg.backend << "\n"
+        << "dml_device_id = " << cfg.dml_device_id << "\n"
+        << "ai_model = " << cfg.ai_model << "\n"
+        << std::fixed << std::setprecision(2)
+        << "confidence_threshold = " << cfg.confidence_threshold << "\n"
+        << "hip_aim_confidence_threshold = " << cfg.hip_aim_confidence_threshold << "\n"
+        << "hip_aim_min_box_area = " << cfg.hip_aim_min_box_area << "\n"
+        << "nms_threshold = " << cfg.nms_threshold << "\n"
+        << std::setprecision(0)
+        << "max_detections = " << cfg.max_detections << "\n"
+        << "postprocess = " << cfg.postprocess << "\n"
+        << "batch_size = " << cfg.batch_size << "\n";
+#ifdef USE_CUDA
+    file << "export_enable_fp8 = " << (cfg.export_enable_fp8 ? "true" : "false") << "\n"
+        << "export_enable_fp16 = " << (cfg.export_enable_fp16 ? "true" : "false") << "\n";
+#endif
+    file << "fixed_input_size = " << (cfg.fixed_input_size ? "true" : "false") << "\n";
+
+    // CUDA
+#ifdef USE_CUDA
+    file << "\n# CUDA\n"
+        << "use_cuda_graph = " << (cfg.use_cuda_graph ? "true" : "false") << "\n"
+        << "use_pinned_memory = " << (cfg.use_pinned_memory ? "true" : "false") << "\n\n";
+#endif
+
+    // Buttons
+    file << "# Buttons\n"
+        << "button_targeting = " << cfg.joinStrings(cfg.button_targeting) << "\n"
+        << "button_shoot = " << cfg.joinStrings(cfg.button_shoot) << "\n"
+        << "button_zoom = " << cfg.joinStrings(cfg.button_zoom) << "\n"
+        << "button_exit = " << cfg.joinStrings(cfg.button_exit) << "\n"
+        << "button_pause = " << cfg.joinStrings(cfg.button_pause) << "\n"
+        << "button_reload_config = " << cfg.joinStrings(cfg.button_reload_config) << "\n"
+        << "button_open_overlay = " << cfg.joinStrings(cfg.button_open_overlay) << "\n"
+        << "enable_arrows_settings = " << (cfg.enable_arrows_settings ? "true" : "false") << "\n\n";
+
+    // Overlay
+    file << "# Overlay\n"
+        << "overlay_opacity = " << cfg.overlay_opacity << "\n"
+        << std::fixed << std::setprecision(2)
+        << "overlay_ui_scale = " << cfg.overlay_ui_scale << "\n\n";
+
+    // Custom Classes
+    file << "# Custom Classes\n"
+        << "class_player = " << cfg.class_player << "\n"
+        << "class_bot = " << cfg.class_bot << "\n"
+        << "class_hideout_target_human = " << cfg.class_hideout_target_human << "\n"
+        << "class_hideout_target_balls = " << cfg.class_hideout_target_balls << "\n"
+        << "class_head = " << cfg.class_head << "\n"
+        << "class_third_person = " << cfg.class_third_person << "\n\n";
+
+    // Debug
+    file << "# Debug\n"
+        << "show_window = " << (cfg.show_window ? "true" : "false") << "\n"
+        << "show_fps = " << (cfg.show_fps ? "true" : "false") << "\n"
+        << "screenshot_button = " << cfg.joinStrings(cfg.screenshot_button) << "\n"
+        << "screenshot_delay = " << cfg.screenshot_delay << "\n"
+        << "verbose = " << (cfg.verbose ? "true" : "false") << "\n\n";
+
+    // Active game
+    file << "# Active game profile\n";
+    file << "active_game = " << cfg.active_game << "\n\n";
+    file << "[Games]\n";
+    for (const auto& kv : cfg.game_profiles)
+    {
+        const auto& gp = kv.second;
+        file << gp.name << " = true\n";
+    }
 }
 
 bool Config::loadConfig(const std::string& filename)
@@ -466,153 +620,21 @@ bool Config::saveConfig(const std::string& filename)
         return false;
     }
 
-    file << "# An explanation of the options can be found at:\n";
-    file << "# https://github.com/ExodusTeam/exodus-docs/blob/main/config/config_cpp.md\n\n";
+    writeConfigToStream(file, *this, nullptr);
+    file.close();
+    return true;
+}
 
-    // Capture
-    file << "# Capture\n"
-        << "capture_method = " << capture_method << "\n"
-        << "detection_resolution = " << detection_resolution << "\n"
-        << "capture_fps = " << capture_fps << "\n"
-        << "monitor_idx = " << monitor_idx << "\n"
-        << "circle_mask = " << (circle_mask ? "true" : "false") << "\n"
-        << "capture_borders = " << (capture_borders ? "true" : "false") << "\n"
-        << "capture_cursor = " << (capture_cursor ? "true" : "false") << "\n"
-        << "virtual_camera_name = " << virtual_camera_name << "\n"
-        << "virtual_camera_width = " << virtual_camera_width << "\n"
-        << "virtual_camera_heigth = " << virtual_camera_heigth << "\n\n";
-
-    // Target
-    file << "# Target\n"
-        << "disable_headshot = " << (disable_headshot ? "true" : "false") << "\n"
-        << std::fixed << std::setprecision(2)
-        << "body_y_offset = " << body_y_offset << "\n"
-        << "head_y_offset = " << head_y_offset << "\n"
-        << "body_distance_compensation = " << body_distance_compensation << "\n"
-        << "head_distance_compensation = " << head_distance_compensation << "\n"
-        << "ignore_third_person = " << (ignore_third_person ? "true" : "false") << "\n"
-        << "shooting_range_targets = " << (shooting_range_targets ? "true" : "false") << "\n"
-        << "auto_aim = " << (auto_aim ? "true" : "false") << "\n"
-        << "auto_hip_aim = " << (auto_hip_aim ? "true" : "false") << "\n\n";
-
-    // Mouse
-    double normalizedPitch = fovScaled ? pitch : yaw;
-
-    file << "# Mouse move\n"
-        << "fovX = " << fovX << "\n"
-        << "fovY = " << fovY << "\n"
-        << "minSpeedMultiplier = " << minSpeedMultiplier << "\n"
-        << "maxSpeedMultiplier = " << maxSpeedMultiplier << "\n"
-        << std::fixed << std::setprecision(4)
-        << "sensitivity = " << sens << "\n"
-        << "yaw = " << yaw << "\n"
-        << "pitch = " << normalizedPitch << "\n"
-        << "fov_scaled = " << (fovScaled ? "true" : "false") << "\n"
-        << std::setprecision(2)
-        << "base_fov = " << baseFOV << "\n"
-
-        << "predictionInterval = " << predictionInterval << "\n"
-        << "prediction_futurePositions = " << prediction_futurePositions << "\n"
-        << "draw_futurePositions = " << (draw_futurePositions ? "true" : "false") << "\n"
-
-        << "snapRadius = " << snapRadius << "\n"
-        << "nearRadius = " << nearRadius << "\n"
-        << "speedCurveExponent = " << speedCurveExponent << "\n"
-        << std::fixed << std::setprecision(2)
-        << "snapBoostFactor = " << snapBoostFactor << "\n"
-
-        << "easynorecoil = " << (easynorecoil ? "true" : "false") << "\n"
-        << std::fixed << std::setprecision(1)
-        << "easynorecoilstrength = " << easynorecoilstrength << "\n\n";
-
-    // Wind mouse
-    file << "# Wind mouse\n"
-        << "wind_mouse_enabled = " << (wind_mouse_enabled ? "true" : "false") << "\n"
-        << "wind_G = " << wind_G << "\n"
-        << "wind_W = " << wind_W << "\n"
-        << "wind_M = " << wind_M << "\n"
-        << "wind_D = " << wind_D << "\n\n";
-
-    // Mouse shooting
-    file << "# Mouse shooting\n"
-        << "auto_shoot = " << (auto_shoot ? "true" : "false") << "\n"
-        << std::fixed << std::setprecision(1)
-        << "bScope_multiplier = " << bScope_multiplier << "\n"
-        << "auto_shoot_fire_delay_ms = " << auto_shoot_fire_delay_ms << "\n"
-        << "auto_shoot_press_duration_ms = " << auto_shoot_press_duration_ms << "\n"
-        << "auto_shoot_full_auto_grace_ms = " << auto_shoot_full_auto_grace_ms << "\n\n";
-
-    // AI
-    file << "# AI\n"
-        << "backend = " << backend << "\n"
-        << "dml_device_id = " << dml_device_id << "\n"
-        << "ai_model = " << ai_model << "\n"
-        << std::fixed << std::setprecision(2)
-        << "confidence_threshold = " << confidence_threshold << "\n"
-        << "hip_aim_confidence_threshold = " << hip_aim_confidence_threshold << "\n"
-        << "hip_aim_min_box_area = " << hip_aim_min_box_area << "\n"
-        << "nms_threshold = " << nms_threshold << "\n"
-        << std::setprecision(0)
-        << "max_detections = " << max_detections << "\n"
-        << "postprocess = " << postprocess << "\n"
-        << "batch_size = " << batch_size << "\n"
-#ifdef USE_CUDA
-        << "export_enable_fp8 = " << (export_enable_fp8 ? "true" : "false") << "\n"
-        << "export_enable_fp16 = " << (export_enable_fp16 ? "true" : "false") << "\n"
-#endif
-        << "fixed_input_size = " << (fixed_input_size ? "true" : "false") << "\n";
-    
-    // CUDA
-#ifdef USE_CUDA
-    file << "\n# CUDA\n"
-        << "use_cuda_graph = " << (use_cuda_graph ? "true" : "false") << "\n"
-        << "use_pinned_memory = " << (use_pinned_memory ? "true" : "false") << "\n\n";
-#endif
-
-    // Buttons
-    file << "# Buttons\n"
-        << "button_targeting = " << joinStrings(button_targeting) << "\n"
-        << "button_shoot = " << joinStrings(button_shoot) << "\n"
-        << "button_zoom = " << joinStrings(button_zoom) << "\n"
-        << "button_exit = " << joinStrings(button_exit) << "\n"
-        << "button_pause = " << joinStrings(button_pause) << "\n"
-        << "button_reload_config = " << joinStrings(button_reload_config) << "\n"
-        << "button_open_overlay = " << joinStrings(button_open_overlay) << "\n"
-        << "enable_arrows_settings = " << (enable_arrows_settings ? "true" : "false") << "\n\n";
-
-    // Overlay
-    file << "# Overlay\n"
-        << "overlay_opacity = " << overlay_opacity << "\n"
-        << std::fixed << std::setprecision(2)
-        << "overlay_ui_scale = " << overlay_ui_scale << "\n\n";
-
-    // Custom Classes
-    file << "# Custom Classes\n"
-        << "class_player = " << class_player << "\n"
-        << "class_bot = " << class_bot << "\n"
-        << "class_hideout_target_human = " << class_hideout_target_human << "\n"
-        << "class_hideout_target_balls = " << class_hideout_target_balls << "\n"
-        << "class_head = " << class_head << "\n"
-        << "class_third_person = " << class_third_person << "\n\n";
-
-    // Debug
-    file << "# Debug\n"
-        << "show_window = " << (show_window ? "true" : "false") << "\n"
-        << "show_fps = " << (show_fps ? "true" : "false") << "\n"
-        << "screenshot_button = " << joinStrings(screenshot_button) << "\n"
-        << "screenshot_delay = " << screenshot_delay << "\n"
-        << "verbose = " << (verbose ? "true" : "false") << "\n\n";
-
-    // Active game
-    file << "# Active game profile\n";
-    file << "active_game = " << active_game << "\n\n";
-    file << "[Games]\n";
-    for (auto& kv : game_profiles)
+bool Config::savePreset(const std::string& filename, const std::string& presetName) const
+{
+    std::ofstream file(filename);
+    if (!file.is_open())
     {
-        const auto& gp = kv.second;
-        file << gp.name << " = true\n";
+        std::cerr << "Error opening preset for writing: " << filename << std::endl;
+        return false;
     }
 
+    writeConfigToStream(file, *this, &presetName);
     file.close();
     return true;
 }

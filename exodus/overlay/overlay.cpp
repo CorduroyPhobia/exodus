@@ -349,6 +349,13 @@ void OverlayThread()
                         ImGui::EndTabItem();
                     }
 
+                    if (ImGui::BeginTabItem("Presets"))
+                    {
+                        draw_presets();
+
+                        ImGui::EndTabItem();
+                    }
+
                     if (ImGui::BeginTabItem("Buttons"))
                     {
                         draw_buttons();
@@ -381,6 +388,7 @@ void OverlayThread()
                     {
                         BYTE opacity = config.overlay_opacity;
                         SetLayeredWindowAttributes(g_hwnd, 0, opacity, LWA_ALPHA);
+                        prev_opacity = config.overlay_opacity;
                         config.saveConfig();
                     }
 

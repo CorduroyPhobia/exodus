@@ -133,8 +133,9 @@ public:
 
     bool loadConfig(const std::string& filename = "config.ini");
     bool saveConfig(const std::string& filename = "config.ini");
+    bool savePreset(const std::string& filename, const std::string& presetName) const;
 
-    std::string joinStrings(const std::vector<std::string>& vec, const std::string& delimiter = ",");
+    std::string joinStrings(const std::vector<std::string>& vec, const std::string& delimiter = ",") const;
 private:
     std::vector<std::string> splitString(const std::string& str, char delimiter = ',');
 };

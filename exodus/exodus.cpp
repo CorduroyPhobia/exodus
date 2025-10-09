@@ -193,6 +193,13 @@ int main()
             return -1;
         }
 
+        if (!CreateDirectory(L"presets", NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+        {
+            std::cout << "[MAIN] Error with presets folder" << std::endl;
+            std::cin.get();
+            return -1;
+        }
+
         if (!config.loadConfig())
         {
             std::cerr << "[Config] Error with loading config!" << std::endl;
