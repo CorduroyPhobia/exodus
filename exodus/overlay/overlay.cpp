@@ -25,6 +25,7 @@
 #include "keyboard_listener.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
+#include "pi/pi_serial_manager.h"
 #ifdef USE_CUDA
 #include "trt_detector.h"
 #endif
@@ -339,6 +340,25 @@ void OverlayThread()
             ImGui::Begin("Options", &show_overlay, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
             {
                 std::lock_guard<std::mutex> lock(configMutex);
+
+                bool piToggle = gPiSerialManager.isConnected();
+                if (ImGui::Checkbox("Connect Pi", &piToggle))
+                {
+                    if (piToggle)
+                    {
+                        if (!gPiSerialManager.connect())
+                        {
+                            piToggle = false;
+                        }
+                    }
+                    else
+                    {
+                        gPiSerialManager.disconnect();
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::TextUnformatted(gPiSerialManager.statusMessage().c_str());
+                ImGui::Separator();
 
                 if (ImGui::BeginTabBar("Options tab bar"))
                 {

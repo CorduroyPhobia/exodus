@@ -38,6 +38,8 @@
     <ClCompile Include="keyboard\keycodes.cpp" />
     <ClCompile Include="mouse\mouse.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
+    <ClCompile Include="pi\pi_serial_manager.cpp" />
+    <ClCompile Include="pi\serial_port.cpp" />
     <ClCompile Include="overlay\draw_ai.cpp" />
     <ClCompile Include="overlay\draw_buttons.cpp" />
     <ClCompile Include="overlay\draw_capture.cpp" />
@@ -85,6 +87,8 @@
     <ClInclude Include="mouse\AimbotTarget.h" />
     <ClInclude Include="overlay\draw_settings.h" />
     <ClInclude Include="overlay\overlay.h" />
+    <ClInclude Include="pi\pi_serial_manager.h" />
+    <ClInclude Include="pi\serial_port.h" />
     <ClInclude Include="exodus.h" />
     <ClInclude Include="tensorrt\nvinf.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">true</ExcludedFromBuild>

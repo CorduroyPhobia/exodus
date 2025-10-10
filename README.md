@@ -159,6 +159,49 @@ exodus/
   Download [GLFW Windows binaries](https://www.glfw.org/download.html)
   Place the folder as shown above.
 
+---
+
+## Raspberry Pi Zero 2W USB Input Hub
+
+The Windows application can offload USB HID mouse output and preset selection to a Raspberry Pi Zero 2W connected over USB. The Pi runs a small helper located at `pi/pi_hub.cpp` that exposes a scrollable preset menu on the Waveshare 1.3" LCD HAT and emulates a relative USB mouse device.
+
+### Pi prerequisites
+
+1. Flash the latest Raspberry Pi OS Lite on the Pi Zero 2W and boot once with SSH enabled.
+2. Enable SPI and I²C interfaces using `sudo raspi-config` (**Interface Options → SPI**).
+3. Ensure the Waveshare HAT pull-ups are active by adding the following to `/boot/config.txt` and rebooting:
+
+   ```ini
+   gpio=6,19,5,26,13,21,20,16=pu
+   ```
+
+4. Install build dependencies:
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y g++ wiringpi libusb-1.0-0-dev
+   ```
+
+### Build and run on the Pi
+
+```bash
+g++ -std=c++17 -O2 pi_hub.cpp -lwiringPi -lusb-1.0 -lpthread -o pi_hub
+sudo ./pi_hub /dev/ttyACM0 1d6b 0104
+```
+
+* `/dev/ttyACM0` is the serial gadget presented to Windows. Adjust if necessary.
+* `1d6b 0104` are placeholder VID/PID values for the USB HID gadget; change these if your gadget configuration uses different IDs.
+* The helper listens for the PC handshake, displays presets using joystick up/down and KEY1 (select), KEY2 (back to top), and applies mouse deltas received as `MOUSE:x,y` reports.
+
+### Windows integration workflow
+
+1. Connect the Pi Zero 2W to the PC via USB (data-capable cable).
+2. Launch Exodus. The app scans COM ports, performs the handshake (`PC_HELLO`/`PI_READY`/`PC_ACK`), and pushes available preset `.ini` filenames.
+3. Open the overlay (F5) and toggle **Connect Pi** to monitor status. When connected, mouse output is routed through the Pi; otherwise Windows `SendInput` is used as a fallback.
+4. Preset saves/deletes from the overlay automatically refresh the Pi menu. Selecting an item on the Pi sends `SELECT:preset.ini`, which the PC loads immediately.
+
+If the Pi is disconnected or the handshake fails, the status indicator reports the issue and mouse movement reverts to direct Windows control.
+
 * **OpenCV:**
   Use your custom build or official DLLs (see CUDA/DML notes below).
   Place DLLs either next to your exe or in `modules/opencv/`.

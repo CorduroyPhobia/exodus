@@ -9,6 +9,8 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <algorithm>
+#include <vector>
 
 #include "capture.h"
 #include "mouse.h"
@@ -17,6 +19,7 @@
 #include "overlay.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
+#include "pi/pi_serial_manager.h"
 
 std::condition_variable frameCV;
 std::atomic<bool> shouldExit(false);
@@ -45,6 +48,166 @@ std::atomic<bool> show_window_changed(false);
 std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
 
+static std::vector<std::string> collectPresetFilenames()
+{
+    std::vector<std::string> names;
+    std::filesystem::path dir = std::filesystem::current_path() / "presets";
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec))
+        return names;
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+    {
+        if (!entry.is_regular_file())
+            continue;
+        const auto& path = entry.path();
+        if (path.extension() != ".ini")
+            continue;
+        names.push_back(path.filename().string());
+    }
+
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+static void applyPresetSideEffectsFromPi(const Config& previous)
+{
+    bool mouseConfigChanged =
+        previous.detection_resolution != config.detection_resolution ||
+        previous.fovX != config.fovX ||
+        previous.fovY != config.fovY ||
+        previous.minSpeedMultiplier != config.minSpeedMultiplier ||
+        previous.maxSpeedMultiplier != config.maxSpeedMultiplier ||
+        previous.predictionInterval != config.predictionInterval ||
+        previous.snapRadius != config.snapRadius ||
+        previous.nearRadius != config.nearRadius ||
+        previous.speedCurveExponent != config.speedCurveExponent ||
+        previous.snapBoostFactor != config.snapBoostFactor ||
+        previous.auto_shoot != config.auto_shoot ||
+        previous.auto_shoot_hold_until_off_target != config.auto_shoot_hold_until_off_target ||
+        previous.bScope_multiplier != config.bScope_multiplier ||
+        previous.auto_shoot_fire_delay_ms != config.auto_shoot_fire_delay_ms ||
+        previous.auto_shoot_press_duration_ms != config.auto_shoot_press_duration_ms ||
+        previous.auto_shoot_full_auto_grace_ms != config.auto_shoot_full_auto_grace_ms ||
+        previous.wind_mouse_enabled != config.wind_mouse_enabled ||
+        previous.wind_G != config.wind_G ||
+        previous.wind_W != config.wind_W ||
+        previous.wind_M != config.wind_M ||
+        previous.wind_D != config.wind_D ||
+        previous.wind_speed_multiplier != config.wind_speed_multiplier ||
+        previous.wind_min_velocity != config.wind_min_velocity ||
+        previous.wind_target_radius != config.wind_target_radius;
+
+    if (mouseConfigChanged && globalMouseThread)
+    {
+        globalMouseThread->updateConfig(
+            config.detection_resolution,
+            config.fovX,
+            config.fovY,
+            config.minSpeedMultiplier,
+            config.maxSpeedMultiplier,
+            config.predictionInterval,
+            config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
+    }
+
+    if (previous.detection_resolution != config.detection_resolution)
+    {
+        detection_resolution_changed.store(true);
+        detector_model_changed.store(true);
+    }
+
+    if (previous.capture_method != config.capture_method ||
+        previous.circle_mask != config.circle_mask ||
+        previous.monitor_idx != config.monitor_idx ||
+        previous.virtual_camera_name != config.virtual_camera_name ||
+        previous.virtual_camera_width != config.virtual_camera_width ||
+        previous.virtual_camera_heigth != config.virtual_camera_heigth)
+    {
+        capture_method_changed.store(true);
+    }
+
+    if (previous.capture_cursor != config.capture_cursor)
+        capture_cursor_changed.store(true);
+    if (previous.capture_borders != config.capture_borders)
+        capture_borders_changed.store(true);
+    if (previous.capture_fps != config.capture_fps)
+        capture_fps_changed.store(true);
+
+    if (previous.fixed_input_size != config.fixed_input_size)
+    {
+        capture_method_changed.store(true);
+        detector_model_changed.store(true);
+    }
+
+    if (previous.backend != config.backend ||
+        previous.ai_model != config.ai_model ||
+        previous.postprocess != config.postprocess ||
+        previous.batch_size != config.batch_size ||
+        previous.dml_device_id != config.dml_device_id ||
+        previous.confidence_threshold != config.confidence_threshold ||
+        previous.hip_aim_confidence_threshold != config.hip_aim_confidence_threshold ||
+        previous.hip_aim_min_box_area != config.hip_aim_min_box_area ||
+        previous.nms_threshold != config.nms_threshold ||
+        previous.max_detections != config.max_detections)
+    {
+        detector_model_changed.store(true);
+    }
+
+    if (previous.overlay_opacity != config.overlay_opacity)
+    {
+        BYTE opacity = static_cast<BYTE>(config.overlay_opacity);
+        if (g_hwnd)
+        {
+            SetLayeredWindowAttributes(g_hwnd, 0, opacity, LWA_ALPHA);
+        }
+    }
+
+    if (previous.show_window != config.show_window)
+    {
+        show_window_changed.store(true);
+    }
+}
+
+static void handlePresetSelectionFromPi(const std::string& presetName)
+{
+    std::lock_guard<std::mutex> lock(configMutex);
+
+    std::filesystem::path dir = std::filesystem::current_path() / "presets";
+    std::filesystem::path presetPath = dir / presetName;
+    presetPath = presetPath.lexically_normal();
+
+    if (presetPath.filename().string() != presetName)
+    {
+        std::cerr << "[PiSerial] Ignoring invalid preset selection: " << presetName << std::endl;
+        return;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::exists(presetPath, ec))
+    {
+        std::cerr << "[PiSerial] Selected preset not found: " << presetPath << std::endl;
+        return;
+    }
+
+    Config previous = config;
+    if (!config.loadConfig(presetPath.string()))
+    {
+        std::cerr << "[PiSerial] Failed to load preset: " << presetPath << std::endl;
+        config = previous;
+        return;
+    }
+
+    config.active_preset = presetPath.filename().string();
+    applyPresetSideEffectsFromPi(previous);
+    config.saveConfig();
+
+    std::cout << "[PiSerial] Loaded preset from Pi: " << config.active_preset << std::endl;
+}
 static void ensureActivePresetLoaded()
 {
     if (config.active_preset.empty())
@@ -307,6 +470,10 @@ int main()
         );
 
         globalMouseThread = &mouseThread;
+
+        gPiSerialManager.setPresetSelectionCallback(handlePresetSelectionFromPi);
+        gPiSerialManager.updatePresetList(collectPresetFilenames());
+        gPiSerialManager.connect();
 
         std::vector<std::string> availableModels = getAvailableModels();
 
