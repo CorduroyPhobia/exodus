@@ -10,6 +10,8 @@
 #include <atomic>
 #include <vector>
 
+#include <opencv2/opencv.hpp>
+
 #include "mouse.h"
 #include "capture.h"
 #include "exodus.h"
@@ -490,6 +492,60 @@ void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMo
     }
 }
 
+bool MouseThread::teammateColorDetectedAboveTarget(const AimbotTarget& target)
+{
+    cv::Mat region;
+    {
+        std::lock_guard<std::mutex> lock(frameMutex);
+        if (latestFrame.empty())
+        {
+            return false;
+        }
+
+        int frameWidth = latestFrame.cols;
+        int frameHeight = latestFrame.rows;
+
+        int left = std::clamp(target.x, 0, frameWidth);
+        int right = std::clamp(target.x + target.w, 0, frameWidth);
+        int bottom = std::clamp(target.y, 0, frameHeight);
+
+        if (right <= left || bottom <= 0)
+        {
+            return false;
+        }
+
+        int sampleHeight = std::max(1, target.h / 6);
+        int top = std::max(0, bottom - sampleHeight);
+        int height = bottom - top;
+        if (height <= 0)
+        {
+            return false;
+        }
+
+        region = latestFrame(cv::Rect(left, top, right - left, height)).clone();
+    }
+
+    const cv::Vec3b teammateColor(0xD2, 0x9D, 0x0F);
+    constexpr int tolerance = 12;
+
+    for (int y = 0; y < region.rows; ++y)
+    {
+        const cv::Vec3b* row = region.ptr<cv::Vec3b>(y);
+        for (int x = 0; x < region.cols; ++x)
+        {
+            const cv::Vec3b& pixel = row[x];
+            if (std::abs(static_cast<int>(pixel[0]) - teammateColor[0]) <= tolerance &&
+                std::abs(static_cast<int>(pixel[1]) - teammateColor[1]) <= tolerance &&
+                std::abs(static_cast<int>(pixel[2]) - teammateColor[2]) <= tolerance)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void MouseThread::pressMouse(const AimbotTarget& target)
 {
     std::lock_guard<std::mutex> lock(input_method_mutex);
@@ -499,6 +555,17 @@ void MouseThread::pressMouse(const AimbotTarget& target)
 
     if (inScope)
     {
+        if (teammateColorDetectedAboveTarget(target))
+        {
+            if (mouse_pressed)
+            {
+                sendMouseRelease();
+                mouse_pressed = false;
+                last_release_time = now;
+            }
+            return;
+        }
+
         last_in_scope_time = now;
 
         if (!mouse_pressed)
