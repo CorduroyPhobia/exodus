@@ -1,0 +1,14 @@
+[Unit]
+Description=Exodus Pi automation agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment="EXODUS_ROOT=/boot/exodus"
+ExecStart=/opt/exodus-venv/bin/python -m pi_side.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+# Raspberry Pi Python dependencies
+adafruit-circuitpython-st7789
+adafruit-circuitpython-rgb-display
+spidev
+RPi.GPIO
+pyserial
+pyusb
+Pillow
+numpy
+msgpack
+cryptography

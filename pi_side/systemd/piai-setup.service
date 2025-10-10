@@ -1,0 +1,12 @@
+[Unit]
+Description=Exodus Pi first boot setup
+ConditionPathExists=!/boot/exodus/state/.setup_complete
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /boot/exodus/pi_side/setup/install.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

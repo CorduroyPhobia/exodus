@@ -1,0 +1,6 @@
+pyyaml
+pywin32
+psutil
+aiofiles
+websockets
+cryptography

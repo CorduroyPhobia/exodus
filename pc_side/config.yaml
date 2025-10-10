@@ -1,0 +1,13 @@
+# Windows host configuration
+version: 1.0.0
+listen_host: 0.0.0.0
+listen_port: 27121
+allowed_cidr: 192.168.137.0/24
+program_data: C:/ProgramData/ExodusAI
+binary_dir: C:/ProgramData/ExodusAI/bin
+preset_dir: C:/ProgramData/ExodusAI/presets
+model_dir: C:/ProgramData/ExodusAI/models
+log_dir: C:/ProgramData/ExodusAI/logs
+handshake_secret: change-me
+ai_executable: C:/ProgramData/ExodusAI/bin/ai.exe
+heartbeat_timeout: 10
