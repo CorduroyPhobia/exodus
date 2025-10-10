@@ -198,7 +198,6 @@ bool Config::loadConfig(const std::string& filename)
 {
     if (!std::filesystem::exists(filename))
     {
-        std::cerr << "[Config] Config file does not exist, creating default config: " << filename << std::endl;
 
         // Capture
         capture_method = "duplication_api";

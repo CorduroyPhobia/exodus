@@ -45,7 +45,7 @@ std::string GetDMLDeviceName(int deviceId)
 
 DirectMLDetector::DirectMLDetector(const std::string& model_path)
     :
-    env(ORT_LOGGING_LEVEL_WARNING, "DML_Detector"),
+    env(ORT_LOGGING_LEVEL_ERROR, "DML_Detector"),
     memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault))
 {
     Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_DML(session_options, config.dml_device_id));
