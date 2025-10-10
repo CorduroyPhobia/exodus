@@ -124,6 +124,8 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
     <!-- <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.8.props" /> -->
+    <Import Project="..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.props" Condition="Exists('..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.props')" />
+    <Import Project="..\packages\opencv.4.10.0.84\build\native\opencv.props" Condition="Exists('..\packages\opencv.4.10.0.84\build\native\opencv.props')" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -134,16 +136,42 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="DependencyRoots">
+    <ExodusPackagesRoot Condition="'$(ExodusPackagesRoot)' == ''">$(SolutionDir)packages\</ExodusPackagesRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <OpenCVNativeDir Include="$(ExodusPackagesRoot)opencv*\build\native\" Condition="Exists('%(Identity)')" />
+    <TensorRTNativeDir Include="$(ExodusPackagesRoot)TensorRT*\build\native\" Condition="Exists('%(Identity)')" />
+    <TensorRTNativeDir Include="$(ExodusPackagesRoot)TensorRT-Parser*\build\native\" Condition="Exists('%(Identity)')" />
+  </ItemGroup>
+  <PropertyGroup>
+    <OpenCVNativePath Condition="'$(OpenCVNativePath)' == '' and '$(EXODUS_OPENCV_ROOT)' != ''">$(EXODUS_OPENCV_ROOT)</OpenCVNativePath>
+    <TensorRTNativePath Condition="'$(TensorRTNativePath)' == '' and '$(EXODUS_TENSORRT_ROOT)' != ''">$(EXODUS_TENSORRT_ROOT)</TensorRTNativePath>
+    <OpenCVNativeDirFullPath>@(OpenCVNativeDir->'%(FullPath)')</OpenCVNativeDirFullPath>
+    <TensorRTNativeDirFullPath>@(TensorRTNativeDir->'%(FullPath)')</TensorRTNativeDirFullPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OpenCVNativePath Condition="'$(OpenCVNativePath)' == '' and '$(OpenCVNativeDirFullPath)' != ''">$(OpenCVNativeDirFullPath)</OpenCVNativePath>
+    <TensorRTNativePath Condition="'$(TensorRTNativePath)' == '' and '$(TensorRTNativeDirFullPath)' != ''">$(TensorRTNativeDirFullPath)</TensorRTNativePath>
+    <OpenCVAdditionalInclude />
+    <OpenCVAdditionalLib />
+    <TensorRTAdditionalInclude />
+    <TensorRTAdditionalLib />
+    <OpenCVAdditionalInclude Condition="'$(OpenCVNativePath)' != ''">$(OpenCVNativePath)include;</OpenCVAdditionalInclude>
+    <OpenCVAdditionalLib Condition="'$(OpenCVNativePath)' != ''">$(OpenCVNativePath)lib;</OpenCVAdditionalLib>
+    <TensorRTAdditionalInclude Condition="'$(TensorRTNativePath)' != ''">$(TensorRTNativePath)include;</TensorRTAdditionalInclude>
+    <TensorRTAdditionalLib Condition="'$(TensorRTNativePath)' != ''">$(TensorRTNativePath)lib;</TensorRTAdditionalLib>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='CUDA|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(MSBuildProjectDirectory)\modules\serial\include;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\imgui;$(MSBuildProjectDirectory)\keyboard;$(MSBuildProjectDirectory)\config;$(MSBuildProjectDirectory)\tensorrt;$(MSBuildProjectDirectory)\detector;$(MSBuildProjectDirectory)\mouse;$(MSBuildProjectDirectory)\overlay;$(MSBuildProjectDirectory)\capture;$(MSBuildProjectDirectory)\modules\opencv\build\install\include;$(WindowsSDK_IncludePath);$(WindowsSDK_IncludePath)\cppwinrt;$(MSBuildProjectDirectory)\modules\TensorRT-10.8.0.43\include;include;$(ProgramW6432)\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;$(ProgramW6432)\NVIDIA\CUDNN\v9.7\include\12.8;$(IncludePath)</IncludePath>
-    <LibraryPath>$(MSBuildProjectDirectory)\modules\serial\visual_studio\x64\Release;$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\lib-vc2019;$(MSBuildProjectDirectory)\modules\opencv\build\install\x64\vc16\lib;$(MSBuildProjectDirectory)\modules\\TensorRT-10.8.0.43\lib;$(ProgramW6432)\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64;$(ProgramW6432)\NVIDIA\CUDNN\v9.7\lib\12.8;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(MSBuildProjectDirectory)\modules\serial\include;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\imgui;$(MSBuildProjectDirectory)\keyboard;$(MSBuildProjectDirectory)\config;$(MSBuildProjectDirectory)\tensorrt;$(MSBuildProjectDirectory)\detector;$(MSBuildProjectDirectory)\mouse;$(MSBuildProjectDirectory)\overlay;$(MSBuildProjectDirectory)\capture;$(WindowsSDK_IncludePath);$(WindowsSDK_IncludePath)\cppwinrt;include;$(ProgramW6432)\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;$(ProgramW6432)\NVIDIA\CUDNN\v9.7\include\12.8;$(IncludePath)</IncludePath>
+    <LibraryPath>$(MSBuildProjectDirectory)\modules\serial\visual_studio\x64\Release;$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\lib-vc2019;$(ProgramW6432)\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64;$(ProgramW6432)\NVIDIA\CUDNN\v9.7\lib\12.8;$(LibraryPath)</LibraryPath>
     <TargetName>ai</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DML|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(MSBuildProjectDirectory)\modules\serial\include;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\imgui;$(MSBuildProjectDirectory)\keyboard;$(MSBuildProjectDirectory)\config;$(MSBuildProjectDirectory)\detector;$(MSBuildProjectDirectory)\mouse;$(MSBuildProjectDirectory)\overlay;$(MSBuildProjectDirectory)\capture;$(MSBuildProjectDirectory)\modules\opencv\build\install\include;$(WindowsSDK_IncludePath);$(WindowsSDK_IncludePath)\cppwinrt;include;X:\exodus-main\exodus\modules\opencv;$(IncludePath)</IncludePath>
-    <LibraryPath>$(MSBuildProjectDirectory)\modules\serial\visual_studio\x64\Release;$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\lib-vc2019;$(MSBuildProjectDirectory)\modules\opencv\build\install\x64\vc16\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(MSBuildProjectDirectory)\modules\serial\include;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\imgui;$(MSBuildProjectDirectory)\keyboard;$(MSBuildProjectDirectory)\config;$(MSBuildProjectDirectory)\detector;$(MSBuildProjectDirectory)\mouse;$(MSBuildProjectDirectory)\overlay;$(MSBuildProjectDirectory)\capture;$(WindowsSDK_IncludePath);$(WindowsSDK_IncludePath)\cppwinrt;include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(MSBuildProjectDirectory)\modules\serial\visual_studio\x64\Release;$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\lib-vc2019;$(LibraryPath)</LibraryPath>
     <TargetName>ai</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='CUDA|x64'">
@@ -154,7 +182,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_CUDA;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OpenCVAdditionalInclude)$(TensorRTAdditionalInclude)$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -166,6 +194,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>opencv_world4100.lib;nvinfer_10.lib;nvonnxparser_10.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;cuda.lib;cudart.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OpenCVAdditionalLib)$(TensorRTAdditionalLib)%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <GenerateCatalogFiles>false</GenerateCatalogFiles>
@@ -179,7 +208,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_DML;/DUSE_DML;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OpenCVAdditionalInclude)$(TensorRTAdditionalInclude)$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
@@ -192,7 +221,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>opencv_world4100.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)modules\opencv;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OpenCVAdditionalLib)$(TensorRTAdditionalLib)%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <GenerateCatalogFiles>false</GenerateCatalogFiles>
@@ -203,6 +232,8 @@
     <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.targets')" />
     <Import Project="..\packages\Microsoft.AI.DirectML.1.15.4\build\Microsoft.AI.DirectML.targets" Condition="Exists('..\packages\Microsoft.AI.DirectML.1.15.4\build\Microsoft.AI.DirectML.targets')" />
     <Import Project="..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.22.0\build\native\Microsoft.ML.OnnxRuntime.DirectML.targets" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.22.0\build\native\Microsoft.ML.OnnxRuntime.DirectML.targets')" />
+    <Import Project="..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.targets" Condition="Exists('..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.targets')" />
+    <Import Project="..\packages\opencv.4.10.0.84\build\native\opencv.targets" Condition="Exists('..\packages\opencv.4.10.0.84\build\native\opencv.targets')" />
     <!-- <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.8.targets" /> -->
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
@@ -215,5 +246,9 @@
     <Error Condition="!Exists('..\packages\Microsoft.AI.DirectML.1.15.4\build\Microsoft.AI.DirectML.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.AI.DirectML.1.15.4\build\Microsoft.AI.DirectML.targets'))" />
     <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.22.0\build\native\Microsoft.ML.OnnxRuntime.DirectML.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.22.0\build\native\Microsoft.ML.OnnxRuntime.DirectML.props'))" />
     <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.22.0\build\native\Microsoft.ML.OnnxRuntime.DirectML.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.DirectML.1.22.0\build\native\Microsoft.ML.OnnxRuntime.DirectML.targets'))" />
+    <Error Condition="!Exists('..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.props'))" />
+    <Error Condition="!Exists('..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\TensorRT-Parser.10.8.0.43\build\native\TensorRT-Parser.targets'))" />
+    <Error Condition="!Exists('..\packages\opencv.4.10.0.84\build\native\opencv.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\opencv.4.10.0.84\build\native\opencv.props'))" />
+    <Error Condition="!Exists('..\packages\opencv.4.10.0.84\build\native\opencv.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\opencv.4.10.0.84\build\native\opencv.targets'))" />
   </Target>
 </Project>
