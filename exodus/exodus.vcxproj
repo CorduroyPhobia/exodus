@@ -8,10 +8,6 @@
       <Configuration>DML</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="CUDA|x64">
-      <Configuration>CUDA</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="capture\capture.cpp" />
@@ -21,9 +17,6 @@
     <ClCompile Include="capture\winrt_capture.cpp" />
     <ClCompile Include="config\config.cpp" />
     <ClCompile Include="detector\detection_buffer.cpp" />
-    <ClCompile Include="detector\trt_detector.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="detector\dml_detector.cpp" />
     <ClCompile Include="detector\postProcess.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">false</ExcludedFromBuild>
@@ -50,9 +43,6 @@
     <ClCompile Include="overlay\overlay.cpp" />
     <ClCompile Include="scr\other_tools.cpp" />
     <ClCompile Include="exodus.cpp" />
-    <ClCompile Include="tensorrt\nvinf.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">true</ExcludedFromBuild>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="capture\capture.h" />
@@ -62,9 +52,6 @@
     <ClInclude Include="capture\winrt_capture.h" />
     <ClInclude Include="config\config.h" />
     <ClInclude Include="detector\detection_buffer.h" />
-    <ClInclude Include="detector\trt_detector.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">true</ExcludedFromBuild>
-    </ClInclude>
     <ClInclude Include="detector\dml_detector.h" />
     <ClInclude Include="detector\postProcess.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">false</ExcludedFromBuild>
@@ -86,12 +73,6 @@
     <ClInclude Include="overlay\draw_settings.h" />
     <ClInclude Include="overlay\overlay.h" />
     <ClInclude Include="exodus.h" />
-    <ClInclude Include="tensorrt\nvinf.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">true</ExcludedFromBuild>
-    </ClInclude>
-    <ClInclude Include="tensorrt\trt_monitor.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DML|x64'">true</ExcludedFromBuild>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -107,13 +88,6 @@
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='CUDA|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DML|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -127,50 +101,16 @@
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='CUDA|x64'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='DML|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='CUDA|x64'">
-    <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(MSBuildProjectDirectory)\modules\serial\include;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\imgui;$(MSBuildProjectDirectory)\keyboard;$(MSBuildProjectDirectory)\config;$(MSBuildProjectDirectory)\tensorrt;$(MSBuildProjectDirectory)\detector;$(MSBuildProjectDirectory)\mouse;$(MSBuildProjectDirectory)\overlay;$(MSBuildProjectDirectory)\capture;$(MSBuildProjectDirectory)\modules\opencv\build\install\include;$(WindowsSDK_IncludePath);$(WindowsSDK_IncludePath)\cppwinrt;$(MSBuildProjectDirectory)\modules\TensorRT-10.8.0.43\include;include;$(ProgramW6432)\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;$(ProgramW6432)\NVIDIA\CUDNN\v9.7\include\12.8;$(IncludePath)</IncludePath>
-    <LibraryPath>$(MSBuildProjectDirectory)\modules\serial\visual_studio\x64\Release;$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\lib-vc2019;$(MSBuildProjectDirectory)\modules\opencv\build\install\x64\vc16\lib;$(MSBuildProjectDirectory)\modules\\TensorRT-10.8.0.43\lib;$(ProgramW6432)\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64;$(ProgramW6432)\NVIDIA\CUDNN\v9.7\lib\12.8;$(LibraryPath)</LibraryPath>
-    <TargetName>ai</TargetName>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DML|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(MSBuildProjectDirectory)\modules\serial\include;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\imgui;$(MSBuildProjectDirectory)\keyboard;$(MSBuildProjectDirectory)\config;$(MSBuildProjectDirectory)\detector;$(MSBuildProjectDirectory)\mouse;$(MSBuildProjectDirectory)\overlay;$(MSBuildProjectDirectory)\capture;$(MSBuildProjectDirectory)\modules\opencv\build\install\include;$(WindowsSDK_IncludePath);$(WindowsSDK_IncludePath)\cppwinrt;include;X:\exodus-main\exodus\modules\opencv;$(IncludePath)</IncludePath>
     <LibraryPath>$(MSBuildProjectDirectory)\modules\serial\visual_studio\x64\Release;$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\lib-vc2019;$(MSBuildProjectDirectory)\modules\opencv\build\install\x64\vc16\lib;$(LibraryPath)</LibraryPath>
     <TargetName>ai</TargetName>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='CUDA|x64'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_CUDA;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>opencv_world4100.lib;nvinfer_10.lib;nvonnxparser_10.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;cuda.lib;cudart.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-    <Manifest>
-      <GenerateCatalogFiles>false</GenerateCatalogFiles>
-    </Manifest>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DML|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>

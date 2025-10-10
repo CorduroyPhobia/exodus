@@ -2,17 +2,11 @@
 #define EXODUS_H
 
 #include "config.h"
-#ifdef USE_CUDA
-#include "trt_detector.h"
-#endif
 #include "dml_detector.h"
 #include "mouse.h"
 #include "detection_buffer.h"
 
 extern Config config;
-#ifdef USE_CUDA
-extern TrtDetector trt_detector;
-#endif
 extern DirectMLDetector* dml_detector;
 extern DetectionBuffer detectionBuffer;
 extern MouseThread* globalMouseThread;

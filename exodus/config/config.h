@@ -87,17 +87,8 @@ public:
     int max_detections;
     std::string postprocess;
     int batch_size;
-#ifdef USE_CUDA
-    bool export_enable_fp8;
-    bool export_enable_fp16;
-#endif
     bool fixed_input_size;
 
-    // CUDA
-#ifdef USE_CUDA
-    bool use_cuda_graph;
-    bool use_pinned_memory;
-#endif
     // Buttons
     std::vector<std::string> button_targeting;
     std::vector<std::string> button_shoot;

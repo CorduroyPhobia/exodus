@@ -25,9 +25,6 @@
 #include "keyboard_listener.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
-#ifdef USE_CUDA
-#include "trt_detector.h"
-#endif
 
 ID3D11Device* g_pd3dDevice = NULL;
 ID3D11DeviceContext* g_pd3dDeviceContext = NULL;

@@ -26,10 +26,6 @@ std::atomic<bool> overlayVisible(false);
 std::atomic<bool> detectionPaused(false);
 std::mutex configMutex;
 
-#ifdef USE_CUDA
-TrtDetector trt_detector;
-#endif
-
 DirectMLDetector* dml_detector = nullptr;
 MouseThread* globalMouseThread = nullptr;
 Config config;
@@ -206,16 +202,6 @@ int main()
 {
     try
     {
-#ifdef USE_CUDA
-        int cuda_devices = 0;
-        if (cudaGetDeviceCount(&cuda_devices) != cudaSuccess || cuda_devices == 0)
-        {
-            std::cerr << "[MAIN] CUDA required but no devices found." << std::endl;
-            std::cin.get();
-            return -1;
-        }
-#endif
-
         SetConsoleOutputCP(CP_UTF8);
         cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_FATAL);
 
@@ -349,27 +335,22 @@ int main()
 
         std::thread dml_detThread;
 
-        if (config.backend == "DML")
+        if (config.backend != "DML")
         {
-            dml_detector = new DirectMLDetector("models/" + config.ai_model);
-            std::cout << "[MAIN] DML detector initialized." << std::endl;
-            dml_detThread = std::thread(&DirectMLDetector::dmlInferenceThread, dml_detector);
+            std::cout << "[MAIN] CUDA/TensorRT backend is no longer supported. Falling back to DirectML." << std::endl;
+            config.backend = "DML";
+            config.saveConfig();
         }
-#ifdef USE_CUDA
-        else
-        {
-            trt_detector.initialize("models/" + config.ai_model);
-        }
-#endif
+
+        dml_detector = new DirectMLDetector("models/" + config.ai_model);
+        std::cout << "[MAIN] DML detector initialized." << std::endl;
+        dml_detThread = std::thread(&DirectMLDetector::dmlInferenceThread, dml_detector);
 
         detection_resolution_changed.store(true);
 
         std::thread keyThread(keyboardListener);
         std::thread capThread(captureThread, config.detection_resolution, config.detection_resolution);
 
-#ifdef USE_CUDA
-        std::thread trt_detThread(&TrtDetector::inferenceThread, &trt_detector);
-#endif
         std::thread mouseMovThread(mouseThreadFunction, std::ref(mouseThread));
         std::thread overlayThread(OverlayThread);
 
@@ -384,9 +365,6 @@ int main()
             dml_detThread.join();
         }
 
-#ifdef USE_CUDA
-        trt_detThread.join();
-#endif
         mouseMovThread.join();
         overlayThread.join();
 

@@ -8,9 +8,6 @@
 #include "exodus.h"
 #include "include/other_tools.h"
 #include "overlay.h"
-#ifdef USE_CUDA
-#include "trt_monitor.h"
-#endif
 
 std::string prev_backend = config.backend;
 float prev_confidence_threshold = config.confidence_threshold;
@@ -19,37 +16,8 @@ float prev_hip_aim_min_box_area = config.hip_aim_min_box_area;
 float prev_nms_threshold = config.nms_threshold;
 int prev_max_detections = config.max_detections;
 
-static bool wasExporting = false;
-
 void draw_ai()
 {
-#ifdef USE_CUDA
-    if (gIsTrtExporting)
-    {
-        ImGui::OpenPopup("TensorRT Export Progress");
-    }
-
-    if (ImGui::BeginPopupModal("TensorRT Export Progress", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        std::lock_guard<std::mutex> lock(gProgressMutex);
-        if (!gProgressPhases.empty())
-        {
-            for (auto& [name, phase] : gProgressPhases)
-            {
-                float percent = phase.max > 0 ? phase.current / float(phase.max) : 0.0f;
-                ImGui::Text("%s: %d/%d", name.c_str(), phase.current, phase.max);
-                ImGui::ProgressBar(percent, ImVec2(300, 0));
-            }
-        }
-        else
-        {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::Text("Engine export in progress, please wait...");
-        ImGui::EndPopup();
-    }
-#endif
     std::vector<std::string> availableModels = getAvailableModels();
     if (availableModels.empty())
     {
@@ -85,26 +53,14 @@ void draw_ai()
     }
 
     ImGui::Separator();
-
-#ifdef USE_CUDA
-    std::vector<std::string> backendOptions = { "TRT", "DML" };
-    std::vector<const char*> backendItems = { "TensorRT (CUDA)", "DirectML (CPU/GPU)" };
-
-    int currentBackendIndex = config.backend == "DML" ? 1 : 0;
-
-    if (ImGui::Combo("Backend", &currentBackendIndex, backendItems.data(), static_cast<int>(backendItems.size())))
+    if (config.backend != "DML")
     {
-        std::string newBackend = backendOptions[currentBackendIndex];
-        if (config.backend != newBackend)
-        {
-            config.backend = newBackend;
-            config.saveConfig();
-            detector_model_changed.store(true);
-        }
+        ImGui::TextWrapped("Backend forced to DirectML (previous: %s)", config.backend.c_str());
     }
-
+    ImGui::Text("Backend: DirectML");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(only option)");
     ImGui::Separator();
-#endif
 
     std::vector<std::string> postprocessOptions = { "yolo8", "yolo9", "yolo10", "yolo11", "yolo12" };
     std::vector<const char*> postprocessItems;

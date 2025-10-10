@@ -24,7 +24,7 @@ void draw_stats()
     float current_post = 0.0f;
     float current_nms = 0.0f;
 
-    if (config.backend == "DML" && dml_detector)
+    if (dml_detector)
     {
         current_preprocess = static_cast<float>(dml_detector->lastPreprocessTimeDML.count());
         current_inference = static_cast<float>(dml_detector->lastInferenceTimeDML.count());
@@ -32,16 +32,6 @@ void draw_stats()
         current_post = static_cast<float>(dml_detector->lastPostprocessTimeDML.count());
         current_nms = static_cast<float>(dml_detector->lastNmsTimeDML.count());
     }
-#ifdef USE_CUDA
-    else
-    {
-        current_preprocess = static_cast<float>(trt_detector.lastPreprocessTime.count());
-        current_inference = static_cast<float>(trt_detector.lastInferenceTime.count());
-        current_copy = static_cast<float>(trt_detector.lastCopyTime.count());
-        current_post = static_cast<float>(trt_detector.lastPostprocessTime.count());
-        current_nms = static_cast<float>(trt_detector.lastNmsTime.count());
-    }
-#endif
     preprocess_times[index_inf] = current_preprocess;
     inference_times[index_inf] = current_inference;
     copy_times[index_inf] = current_copy;

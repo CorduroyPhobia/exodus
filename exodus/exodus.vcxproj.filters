@@ -6,8 +6,6 @@
     <ClCompile Include="overlay\overlay.cpp" />
     <ClCompile Include="mouse\mouse.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
-    <ClCompile Include="detector\trt_detector.cpp" />
-    <ClCompile Include="tensorrt\nvinf.cpp" />
     <ClCompile Include="keyboard\keyboard_listener.cpp" />
     <ClCompile Include="keyboard\keycodes.cpp" />
     <ClCompile Include="config\config.cpp" />
@@ -50,8 +48,6 @@
     <ClInclude Include="overlay\overlay.h" />
     <ClInclude Include="mouse\mouse.h" />
     <ClInclude Include="mouse\AimbotTarget.h" />
-    <ClInclude Include="detector\trt_detector.h" />
-    <ClInclude Include="tensorrt\nvinf.h" />
     <ClInclude Include="keyboard\keyboard_listener.h" />
     <ClInclude Include="keyboard\keycodes.h" />
     <ClInclude Include="config\config.h" />
@@ -70,7 +66,6 @@
     <ClInclude Include="exodus.h" />
     <ClInclude Include="overlay\draw_settings.h" />
     <ClInclude Include="detector\dml_detector.h" />
-    <ClInclude Include="tensorrt\trt_monitor.h" />
     <ClInclude Include="capture\capture_utils.h" />
     <ClInclude Include="detector\detection_buffer.h" />
   </ItemGroup>

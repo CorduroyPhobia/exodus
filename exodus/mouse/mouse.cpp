@@ -295,17 +295,7 @@ std::pair<double, double> MouseThread::predict_target_position(double target_x, 
     double predictedX = target_x + vx * prediction_interval;
     double predictedY = target_y + vy * prediction_interval;
 
-    double detectionDelay = 0.05;
-    if (config.backend == "DML")
-    {
-        detectionDelay = dml_detector->lastInferenceTimeDML.count();
-    }
-#ifdef USE_CUDA
-    else
-    {
-        detectionDelay = trt_detector.lastInferenceTime.count();
-    }
-#endif
+    double detectionDelay = dml_detector ? dml_detector->lastInferenceTimeDML.count() : 0.05;
     predictedX += vx * detectionDelay;
     predictedY += vy * detectionDelay;
 

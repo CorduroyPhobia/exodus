@@ -12,9 +12,6 @@
 #include <condition_variable>
 
 #include "capture.h"
-#ifdef USE_CUDA
-#include "trt_detector.h"
-#endif
 #include "exodus.h"
 #include "keycodes.h"
 #include "keyboard_listener.h"
@@ -208,16 +205,10 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
             }
             frameCV.notify_one();
 
-            if (config.backend == "DML" && dml_detector)
+            if (dml_detector)
             {
                 dml_detector->processFrame(screenshotCpu);
             }
-#ifdef USE_CUDA
-            else if (config.backend == "TRT")
-            {
-                trt_detector.processFrame(screenshotCpu);
-            }
-#endif
             if (!config.screenshot_button.empty() && config.screenshot_button[0] != "None")
             {
                 bool buttonPressed = isAnyKeyPressed(config.screenshot_button);

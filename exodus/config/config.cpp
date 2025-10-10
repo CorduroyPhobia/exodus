@@ -141,19 +141,8 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << std::setprecision(0)
         << "max_detections = " << cfg.max_detections << "\n"
         << "postprocess = " << cfg.postprocess << "\n"
-        << "batch_size = " << cfg.batch_size << "\n";
-#ifdef USE_CUDA
-    file << "export_enable_fp8 = " << (cfg.export_enable_fp8 ? "true" : "false") << "\n"
-        << "export_enable_fp16 = " << (cfg.export_enable_fp16 ? "true" : "false") << "\n";
-#endif
-    file << "fixed_input_size = " << (cfg.fixed_input_size ? "true" : "false") << "\n";
-
-    // CUDA
-#ifdef USE_CUDA
-    file << "\n# CUDA\n"
-        << "use_cuda_graph = " << (cfg.use_cuda_graph ? "true" : "false") << "\n"
-        << "use_pinned_memory = " << (cfg.use_pinned_memory ? "true" : "false") << "\n\n";
-#endif
+        << "batch_size = " << cfg.batch_size << "\n"
+        << "fixed_input_size = " << (cfg.fixed_input_size ? "true" : "false") << "\n";
 
     // Buttons
     file << "# Buttons\n"
@@ -291,17 +280,7 @@ bool Config::loadConfig(const std::string& filename)
 
         postprocess = "yolo12";
         batch_size = 8;
-#ifdef USE_CUDA
-        export_enable_fp8 = false;
-        export_enable_fp16 = true;
-#endif
         fixed_input_size = false;
-
-        // CUDA
-#ifdef USE_CUDA
-        use_cuda_graph = false;
-        use_pinned_memory = false;
-#endif
 
         // Buttons
         button_targeting = splitString("RightMouseButton");
@@ -595,17 +574,7 @@ bool Config::loadConfig(const std::string& filename)
     if (batch_size < 1) batch_size = 1;
     if (batch_size > 8) batch_size = 8;
 
-#ifdef USE_CUDA
-    export_enable_fp8 = get_bool("export_enable_fp8", true);
-    export_enable_fp16 = get_bool("export_enable_fp16", true);
-#endif
     fixed_input_size = get_bool("fixed_input_size", false);
-
-    // CUDA
-#ifdef USE_CUDA
-    use_cuda_graph = get_bool("use_cuda_graph", false);
-    use_pinned_memory = get_bool("use_pinned_memory", true);
-#endif
 
     // Buttons
     button_targeting = splitString(get_string("button_targeting", "RightMouseButton"));
