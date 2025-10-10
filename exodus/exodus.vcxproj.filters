@@ -34,6 +34,8 @@
     <ClCompile Include="overlay\draw_stats.cpp" />
     <ClCompile Include="capture\capture_utils.cpp" />
     <ClCompile Include="detector\detection_buffer.cpp" />
+    <ClCompile Include="pi\pi_serial_manager.cpp" />
+    <ClCompile Include="pi\serial_port.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="scr">
@@ -73,6 +75,8 @@
     <ClInclude Include="tensorrt\trt_monitor.h" />
     <ClInclude Include="capture\capture_utils.h" />
     <ClInclude Include="detector\detection_buffer.h" />
+    <ClInclude Include="pi\pi_serial_manager.h" />
+    <ClInclude Include="pi\serial_port.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

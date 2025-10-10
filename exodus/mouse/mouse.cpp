@@ -13,6 +13,7 @@
 #include "mouse.h"
 #include "capture.h"
 #include "exodus.h"
+#include "pi/pi_serial_manager.h"
 
 MouseThread::MouseThread(
     int resolution,
@@ -320,6 +321,14 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     }
 
     std::lock_guard<std::mutex> lock(input_method_mutex);
+
+    if (gPiSerialManager.isConnected())
+    {
+        if (gPiSerialManager.sendMouseDelta(dx, dy))
+        {
+            return;
+        }
+    }
 
     INPUT in{ 0 };
     in.type = INPUT_MOUSE;

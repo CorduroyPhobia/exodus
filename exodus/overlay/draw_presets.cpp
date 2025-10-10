@@ -16,6 +16,7 @@
 #include "draw_settings.h"
 #include "overlay.h"
 #include "exodus.h"
+#include "pi/pi_serial_manager.h"
 
 struct PresetEntry
 {
@@ -161,6 +162,14 @@ static void refreshPresetEntries()
             }
         }
     }
+
+    std::vector<std::string> filenames;
+    filenames.reserve(gPresetEntries.size());
+    for (const auto& entry : gPresetEntries)
+    {
+        filenames.push_back(entry.path.filename().string());
+    }
+    gPiSerialManager.updatePresetList(filenames);
 }
 
 static std::filesystem::path presetPathForName(const std::string& name)
