@@ -382,7 +382,14 @@ bool checkwin1903()
 void welcome_message()
 {
     std::cout <<
-    "\n\nAimbot is started!\n" <<
+    "\n"
+    "___________                .___            \n"
+    "\\_   _____/__  _______   __| _/_ __  ______\n"
+    " |    __)_\\  \\/  /  _ \\ / __ |  |  \\/  ___/\n"
+    " |        \\>    <  <_> ) /_/ |  |  /\\___ \\ \n"
+    "/_______  /__/\\_ \\____/\\____ |____//____  >\n"
+    "        \\/      \\/          \\/          \\/  \n\n"
+    "Aimbot is started!\n" <<
     config.joinStrings(config.button_targeting) << " -> Targeting\n" <<
     config.joinStrings(config.button_exit) << " -> Exit\n" <<
     config.joinStrings(config.button_pause) << " -> Pause Aiming\n" <<
