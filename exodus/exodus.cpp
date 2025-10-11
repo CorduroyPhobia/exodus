@@ -136,8 +136,11 @@ void mouseThreadFunction(MouseThread& mouseThread)
         bool overlayPause = config.pause_when_overlay_open && overlayVisible.load(std::memory_order_acquire);
         bool aimingActive = aiming.load(std::memory_order_relaxed);
         bool hipActive = hipAiming.load(std::memory_order_relaxed);
+        bool zoomingActive = zooming.load(std::memory_order_relaxed);
         bool canMoveMouse = aimingActive && !overlayPause;
-        bool autoShootActive = config.auto_shoot || (config.auto_shoot_with_auto_hip_aim && hipActive);
+        const bool adsAutoShoot = config.auto_shoot && zoomingActive;
+        const bool hipAutoShoot = config.auto_shoot_with_auto_hip_aim && hipActive && !zoomingActive;
+        bool autoShootActive = adsAutoShoot || hipAutoShoot;
 
         AimbotTarget* target = sortTargets(
             boxes,
