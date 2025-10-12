@@ -9,6 +9,11 @@
 #include "exodus.h"
 #include "include/other_tools.h"
 
+#include <algorithm>
+#include <cmath>
+#include <random>
+#include <vector>
+
 int prev_fovX = config.fovX;
 int prev_fovY = config.fovY;
 float prev_minSpeedMultiplier = config.minSpeedMultiplier;
@@ -27,6 +32,9 @@ float prev_wind_D = config.wind_D;
 float prev_wind_speed_multiplier = config.wind_speed_multiplier;
 float prev_wind_min_velocity = config.wind_min_velocity;
 float prev_wind_target_radius = config.wind_target_radius;
+float prev_wind_randomness = config.wind_randomness;
+float prev_wind_inertia = config.wind_inertia;
+float prev_wind_step_randomness = config.wind_step_randomness;
 
 bool prev_auto_shoot = config.auto_shoot;
 bool prev_auto_shoot_hold_until_off_target = config.auto_shoot_hold_until_off_target;
@@ -97,6 +105,277 @@ static void draw_target_correction_demo()
         ImGui::SameLine(130);
         ImGui::TextColored(ImVec4(1.0f, 0.39f, 0.39f, 1.0f), "Snap radius");
     }
+}
+
+struct WindPreviewSnapshot
+{
+    float G;
+    float W;
+    float M;
+    float D;
+    float speedMultiplier;
+    float minVelocity;
+    float targetRadius;
+    float randomness;
+    float inertia;
+    float stepRandomness;
+    int   enabled;
+};
+
+static std::vector<ImVec2> simulate_wind_preview(const WindPreviewSnapshot& snap, ImU32 seed, int dx, int dy)
+{
+    std::vector<ImVec2> points;
+    points.emplace_back(0.0f, 0.0f);
+
+    if (!snap.enabled)
+    {
+        points.emplace_back(static_cast<float>(dx), static_cast<float>(dy));
+        return points;
+    }
+
+    constexpr double SQRT3 = 1.7320508075688772;
+    constexpr double SQRT5 = 2.23606797749979;
+
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<double> dist01(0.0, 1.0);
+    std::uniform_real_distribution<double> distNegPos(-1.0, 1.0);
+
+    double sx = 0.0, sy = 0.0;
+    double targetX = static_cast<double>(dx);
+    double targetY = static_cast<double>(dy);
+    double vx = 0.0, vy = 0.0;
+    double wX = 0.0, wY = 0.0;
+    double windM = snap.M;
+    int cx = 0, cy = 0;
+
+    double tolerance = std::max(0.1, static_cast<double>(snap.targetRadius));
+    double speedScale = std::max(0.1, static_cast<double>(snap.speedMultiplier));
+    double minSpeed = std::max(0.0, static_cast<double>(snap.minVelocity));
+    double minSpeedClamp = snap.M > 0.0f
+        ? std::min(minSpeed, static_cast<double>(snap.M))
+        : minSpeed;
+    double randomnessScale = std::max(0.0, static_cast<double>(snap.randomness));
+    double inertiaFactor = std::clamp(static_cast<double>(snap.inertia), 0.0, 2.0);
+    double clipRandomness = std::clamp(static_cast<double>(snap.stepRandomness), 0.0, 1.0);
+
+    const int maxIterations = 2048;
+    int iterations = 0;
+
+    while (true)
+    {
+        double remaining = std::hypot(targetX - sx, targetY - sy);
+        if (remaining < tolerance || iterations++ >= maxIterations)
+            break;
+
+        double dist = remaining;
+        double wMag = std::min(static_cast<double>(snap.W), dist);
+
+        if (dist >= snap.D)
+        {
+            wX = wX / SQRT3 + distNegPos(rng) * wMag / SQRT5 * randomnessScale;
+            wY = wY / SQRT3 + distNegPos(rng) * wMag / SQRT5 * randomnessScale;
+        }
+        else
+        {
+            wX /= SQRT3;
+            wY /= SQRT3;
+            windM = windM < 3.0 ? dist01(rng) * 3.0 + 3.0 : windM / SQRT5;
+        }
+
+        double divisor = dist > 1e-6 ? dist : 1.0;
+        vx *= inertiaFactor;
+        vy *= inertiaFactor;
+        vx += wX + snap.G * (targetX - sx) / divisor;
+        vy += wY + snap.G * (targetY - sy) / divisor;
+
+        vx *= speedScale;
+        vy *= speedScale;
+
+        double vMag = std::hypot(vx, vy);
+        if (vMag > windM && windM > 0.0)
+        {
+            double minFactor = 1.0 - clipRandomness;
+            minFactor = std::clamp(minFactor, 0.0, 1.0);
+            double factor = minFactor;
+            if (clipRandomness > 0.0)
+                factor = minFactor + clipRandomness * dist01(rng);
+            double vClip = windM * factor;
+            if (vMag > 0.0)
+            {
+                vx = (vx / vMag) * vClip;
+                vy = (vy / vMag) * vClip;
+                vMag = std::hypot(vx, vy);
+            }
+        }
+
+        if (minSpeedClamp > 0.0 && vMag < minSpeedClamp)
+        {
+            if (vMag == 0.0)
+            {
+                double angle = std::atan2(targetY - sy, targetX - sx);
+                vx = std::cos(angle) * minSpeedClamp;
+                vy = std::sin(angle) * minSpeedClamp;
+            }
+            else
+            {
+                double scale = minSpeedClamp / vMag;
+                vx *= scale;
+                vy *= scale;
+            }
+        }
+
+        sx += vx;
+        sy += vy;
+        int rx = static_cast<int>(std::round(sx));
+        int ry = static_cast<int>(std::round(sy));
+        if (rx != cx || ry != cy)
+        {
+            cx = rx;
+            cy = ry;
+            points.emplace_back(static_cast<float>(cx), static_cast<float>(cy));
+        }
+    }
+
+    int final_x = static_cast<int>(std::round(targetX)) - cx;
+    int final_y = static_cast<int>(std::round(targetY)) - cy;
+    if (final_x || final_y)
+    {
+        cx += final_x;
+        cy += final_y;
+        points.emplace_back(static_cast<float>(cx), static_cast<float>(cy));
+    }
+
+    if (points.size() == 1)
+        points.emplace_back(static_cast<float>(dx), static_cast<float>(dy));
+
+    return points;
+}
+
+static void draw_wind_mouse_demo()
+{
+    if (!ImGui::CollapsingHeader("Wind mouse demo"))
+        return;
+
+    ImVec2 canvas_sz(260.0f, 200.0f);
+    ImGui::InvisibleButton("##wind_canvas", canvas_sz);
+    ImVec2 p0 = ImGui::GetItemRectMin();
+    ImVec2 p1 = ImGui::GetItemRectMax();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p0, p1, IM_COL32(22, 22, 22, 255));
+    dl->AddRect(p0, p1, IM_COL32(60, 60, 60, 255));
+
+    ImVec2 start{ p0.x + 28.0f, p1.y - 28.0f };
+    ImVec2 target{ p1.x - 28.0f, p0.y + 48.0f };
+    const int dx = 140;
+    const int dy = -90;
+
+    float scaleX = (target.x - start.x) / static_cast<float>(dx);
+    float scaleY = (target.y - start.y) / static_cast<float>(dy);
+
+    WindPreviewSnapshot snap{
+        config.wind_G,
+        config.wind_W,
+        config.wind_M,
+        config.wind_D,
+        config.wind_speed_multiplier,
+        config.wind_min_velocity,
+        config.wind_target_radius,
+        config.wind_randomness,
+        config.wind_inertia,
+        config.wind_step_randomness,
+        config.wind_mouse_enabled ? 1 : 0
+    };
+
+    ImU32 snapshotHash = ImHashData(&snap, sizeof(snap));
+    static ImU32 cachedHash = 0;
+    static std::vector<ImVec2> cachedPath;
+    if (cachedHash != snapshotHash)
+    {
+        cachedPath = simulate_wind_preview(snap, snapshotHash, dx, dy);
+        cachedHash = snapshotHash;
+    }
+
+    std::vector<ImVec2> mapped;
+    mapped.reserve(cachedPath.size());
+    for (const ImVec2& pt : cachedPath)
+    {
+        mapped.emplace_back(
+            start.x + pt.x * scaleX,
+            start.y + pt.y * scaleY);
+    }
+
+    if (mapped.size() >= 2)
+    {
+        ImU32 pathColor = config.wind_mouse_enabled ? IM_COL32(120, 200, 255, 220) : IM_COL32(170, 170, 170, 220);
+        for (size_t i = 1; i < mapped.size(); ++i)
+        {
+            dl->AddLine(mapped[i - 1], mapped[i], pathColor, 2.0f);
+        }
+
+        static double lastTime = ImGui::GetTime();
+        static double travelled = 0.0;
+        static ImU32 animHash = 0;
+        double now = ImGui::GetTime();
+        double dt = now - lastTime;
+        lastTime = now;
+        if (animHash != snapshotHash)
+        {
+            travelled = 0.0;
+            animHash = snapshotHash;
+        }
+
+        float totalLen = 0.0f;
+        std::vector<float> cumulative(mapped.size(), 0.0f);
+        for (size_t i = 1; i < mapped.size(); ++i)
+        {
+            float segLen = ImLength(mapped[i] - mapped[i - 1]);
+            totalLen += segLen;
+            cumulative[i] = totalLen;
+        }
+
+        if (totalLen > 0.0f)
+        {
+            const float previewSpeed = 80.0f;
+            travelled += dt * previewSpeed;
+            while (travelled > totalLen)
+                travelled -= totalLen;
+
+            ImVec2 marker = mapped.back();
+            for (size_t i = 1; i < mapped.size(); ++i)
+            {
+                if (travelled <= cumulative[i])
+                {
+                    float segmentLen = cumulative[i] - cumulative[i - 1];
+                    float t = segmentLen > 0.0f ? static_cast<float>((travelled - cumulative[i - 1]) / segmentLen) : 0.0f;
+                    marker = ImLerp(mapped[i - 1], mapped[i], t);
+                    break;
+                }
+            }
+            dl->AddCircleFilled(marker, 4.5f, IM_COL32(255, 255, 120, 255));
+        }
+    }
+
+    float avgScale = (std::abs(scaleX) + std::abs(scaleY)) * 0.5f;
+    float behaviourRadius = config.wind_D * avgScale;
+    float stickRadius = config.wind_target_radius * avgScale;
+    behaviourRadius = ImClamp(behaviourRadius, 8.0f, canvas_sz.x * 0.48f);
+    stickRadius = ImClamp(stickRadius, 4.0f, behaviourRadius - 4.0f);
+
+    dl->AddCircle(target, behaviourRadius, IM_COL32(84, 142, 255, 180), 64, 1.5f);
+    dl->AddCircle(target, stickRadius, IM_COL32(255, 180, 100, 200), 64, 1.5f);
+
+    dl->AddCircleFilled(start, 5.0f, IM_COL32(110, 220, 110, 255));
+    dl->AddCircleFilled(target, 5.0f, IM_COL32(220, 110, 110, 255));
+
+    ImGui::Dummy(ImVec2(0, 6));
+    ImGui::TextColored(ImVec4(0.44f, 0.67f, 1.0f, 1.0f), "Behavior change radius");
+    ImGui::SameLine(0.0f, 16.0f);
+    ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.35f, 1.0f), "Stick radius");
+    ImGui::TextColored(ImVec4(0.44f, 0.86f, 0.44f, 1.0f), "Start");
+    ImGui::SameLine(0.0f, 16.0f);
+    ImGui::TextColored(ImVec4(1.0f, 0.44f, 0.44f, 1.0f), "Target");
+    ImGui::TextDisabled("Animated point follows the simulated WindMouse path.");
 }
 
 void draw_mouse()
@@ -265,6 +544,25 @@ void draw_mouse()
             config.saveConfig();
         }
 
+        if (ImGui::SliderFloat("Noise strength", &config.wind_randomness, 0.00f, 2.00f, "%.2f"))
+        {
+            if (config.wind_randomness < 0.0f)
+                config.wind_randomness = 0.0f;
+            config.saveConfig();
+        }
+
+        if (ImGui::SliderFloat("Velocity memory", &config.wind_inertia, 0.00f, 2.00f, "%.2f"))
+        {
+            config.wind_inertia = ImClamp(config.wind_inertia, 0.0f, 2.0f);
+            config.saveConfig();
+        }
+
+        if (ImGui::SliderFloat("Step randomness", &config.wind_step_randomness, 0.00f, 1.00f, "%.2f"))
+        {
+            config.wind_step_randomness = ImClamp(config.wind_step_randomness, 0.0f, 1.0f);
+            config.saveConfig();
+        }
+
         if (ImGui::SliderFloat("Minimum speed", &config.wind_min_velocity, 0.00f, 20.00f, "%.2f"))
         {
             if (config.wind_min_velocity < 0.0f)
@@ -288,9 +586,14 @@ void draw_mouse()
             config.wind_speed_multiplier = 1.0f;
             config.wind_min_velocity = 0.0f;
             config.wind_target_radius = 1.0f;
+            config.wind_randomness = 1.0f;
+            config.wind_inertia = 1.0f;
+            config.wind_step_randomness = 0.5f;
             config.saveConfig();
         }
     }
+
+    draw_wind_mouse_demo();
 
     ImGui::SeparatorText("Input method");
     ImGui::TextDisabled("WIN32 is the only supported mouse input method.");
@@ -342,7 +645,10 @@ void draw_mouse()
         prev_wind_D != config.wind_D ||
         prev_wind_speed_multiplier != config.wind_speed_multiplier ||
         prev_wind_min_velocity != config.wind_min_velocity ||
-        prev_wind_target_radius != config.wind_target_radius)
+        prev_wind_target_radius != config.wind_target_radius ||
+        prev_wind_randomness != config.wind_randomness ||
+        prev_wind_inertia != config.wind_inertia ||
+        prev_wind_step_randomness != config.wind_step_randomness)
     {
         prev_wind_mouse_enabled = config.wind_mouse_enabled;
         prev_wind_G = config.wind_G;
@@ -352,6 +658,9 @@ void draw_mouse()
         prev_wind_speed_multiplier = config.wind_speed_multiplier;
         prev_wind_min_velocity = config.wind_min_velocity;
         prev_wind_target_radius = config.wind_target_radius;
+        prev_wind_randomness = config.wind_randomness;
+        prev_wind_inertia = config.wind_inertia;
+        prev_wind_step_randomness = config.wind_step_randomness;
 
         globalMouseThread->updateConfig(
             config.detection_resolution,

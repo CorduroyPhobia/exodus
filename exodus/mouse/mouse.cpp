@@ -64,6 +64,9 @@ MouseThread::MouseThread(
     wind_speed_multiplier = config.wind_speed_multiplier;
     wind_min_velocity = config.wind_min_velocity;
     wind_target_radius = config.wind_target_radius;
+    wind_randomness = config.wind_randomness;
+    wind_inertia = config.wind_inertia;
+    wind_step_randomness = config.wind_step_randomness;
     wind_max_step_config = config.wind_M;
 
     moveWorker = std::thread(&MouseThread::moveWorkerLoop, this);
@@ -105,6 +108,9 @@ void MouseThread::updateConfig(
     wind_speed_multiplier = config.wind_speed_multiplier;
     wind_min_velocity = config.wind_min_velocity;
     wind_target_radius = config.wind_target_radius;
+    wind_randomness = config.wind_randomness;
+    wind_inertia = config.wind_inertia;
+    wind_step_randomness = config.wind_step_randomness;
     wind_max_step_config = config.wind_M;
 
     residual_move_x = 0.0;
@@ -168,6 +174,9 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
     double minSpeedClamp = wind_max_step_config > 0.0
         ? std::min(minSpeed, static_cast<double>(wind_max_step_config))
         : minSpeed;
+    double randomnessScale = std::max(0.0, static_cast<double>(wind_randomness));
+    double inertiaFactor = std::clamp(static_cast<double>(wind_inertia), 0.0, 2.0);
+    double clipRandomness = std::clamp(static_cast<double>(wind_step_randomness), 0.0, 1.0);
 
     const int maxIterations = 4096;
     int iterations = 0;
@@ -183,8 +192,10 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
 
         if (dist >= wind_D)
         {
-            wX = wX / SQRT3 + ((double)rand() / RAND_MAX * 2.0 - 1.0) * wMag / SQRT5;
-            wY = wY / SQRT3 + ((double)rand() / RAND_MAX * 2.0 - 1.0) * wMag / SQRT5;
+            double randX = ((double)rand() / RAND_MAX * 2.0 - 1.0);
+            double randY = ((double)rand() / RAND_MAX * 2.0 - 1.0);
+            wX = wX / SQRT3 + randX * wMag / SQRT5 * randomnessScale;
+            wY = wY / SQRT3 + randY * wMag / SQRT5 * randomnessScale;
         }
         else
         {
@@ -193,6 +204,8 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
         }
 
         double divisor = dist > 1e-6 ? dist : 1.0;
+        vx *= inertiaFactor;
+        vy *= inertiaFactor;
         vx += wX + wind_G * (dxF - sx) / divisor;
         vy += wY + wind_G * (dyF - sy) / divisor;
 
@@ -202,7 +215,13 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
         double vMag = std::hypot(vx, vy);
         if (vMag > wind_M && wind_M > 0.0)
         {
-            double vClip = wind_M / 2.0 + ((double)rand() / RAND_MAX) * wind_M / 2.0;
+            double minFactor = 1.0 - clipRandomness;
+            minFactor = std::clamp(minFactor, 0.0, 1.0);
+            double vClip = wind_M * minFactor;
+            if (clipRandomness > 0.0)
+            {
+                vClip = wind_M * (minFactor + clipRandomness * ((double)rand() / RAND_MAX));
+            }
             if (vMag > 0.0)
             {
                 vx = (vx / vMag) * vClip;

@@ -69,6 +69,7 @@ private:
     bool   wind_mouse_enabled = true;
     double wind_G, wind_W, wind_M, wind_D;
     double wind_speed_multiplier, wind_min_velocity, wind_target_radius;
+    double wind_randomness, wind_inertia, wind_step_randomness;
     double wind_max_step_config;
     void   windMouseMoveRelative(int dx, int dy);
 

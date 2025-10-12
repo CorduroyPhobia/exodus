@@ -115,7 +115,10 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "wind_D = " << cfg.wind_D << "\n"
         << "wind_speed_multiplier = " << cfg.wind_speed_multiplier << "\n"
         << "wind_min_velocity = " << cfg.wind_min_velocity << "\n"
-        << "wind_target_radius = " << cfg.wind_target_radius << "\n\n";
+        << "wind_target_radius = " << cfg.wind_target_radius << "\n"
+        << "wind_randomness = " << cfg.wind_randomness << "\n"
+        << "wind_inertia = " << cfg.wind_inertia << "\n"
+        << "wind_step_randomness = " << cfg.wind_step_randomness << "\n\n";
 
     // Mouse shooting
     file << "# Mouse shooting\n"
@@ -255,6 +258,9 @@ bool Config::loadConfig(const std::string& filename)
         wind_speed_multiplier = 1.0f;
         wind_min_velocity = 0.0f;
         wind_target_radius = 1.0f;
+        wind_randomness = 1.0f;
+        wind_inertia = 1.0f;
+        wind_step_randomness = 0.5f;
 
         // Mouse shooting
         auto_shoot = false;
@@ -535,6 +541,9 @@ bool Config::loadConfig(const std::string& filename)
     wind_speed_multiplier = (float)get_double("wind_speed_multiplier", 1.0f);
     wind_min_velocity = (float)get_double("wind_min_velocity", 0.0f);
     wind_target_radius = (float)get_double("wind_target_radius", 1.0f);
+    wind_randomness = (float)get_double("wind_randomness", 1.0f);
+    wind_inertia = (float)get_double("wind_inertia", 1.0f);
+    wind_step_randomness = (float)get_double("wind_step_randomness", 0.5f);
 
     if (wind_speed_multiplier < 0.1f)
         wind_speed_multiplier = 0.1f;
@@ -542,6 +551,16 @@ bool Config::loadConfig(const std::string& filename)
         wind_min_velocity = 0.0f;
     if (wind_target_radius < 0.1f)
         wind_target_radius = 0.1f;
+    if (wind_randomness < 0.0f)
+        wind_randomness = 0.0f;
+    if (wind_inertia < 0.0f)
+        wind_inertia = 0.0f;
+    if (wind_inertia > 2.0f)
+        wind_inertia = 2.0f;
+    if (wind_step_randomness < 0.0f)
+        wind_step_randomness = 0.0f;
+    if (wind_step_randomness > 1.0f)
+        wind_step_randomness = 1.0f;
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
