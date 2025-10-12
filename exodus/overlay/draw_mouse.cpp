@@ -329,7 +329,8 @@ static void draw_wind_mouse_demo()
         std::vector<float> cumulative(mapped.size(), 0.0f);
         for (size_t i = 1; i < mapped.size(); ++i)
         {
-            float segLen = ImLength(mapped[i] - mapped[i - 1]);
+            const ImVec2 delta(mapped[i].x - mapped[i - 1].x, mapped[i].y - mapped[i - 1].y);
+            float segLen = std::sqrt(delta.x * delta.x + delta.y * delta.y);
             totalLen += segLen;
             cumulative[i] = totalLen;
         }
