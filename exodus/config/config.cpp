@@ -687,9 +687,15 @@ bool Config::savePreset(const std::string& filename, const std::string& presetNa
 
 void Config::applyAimProfile(float response, float smooth, float stick)
 {
-    aim_response_control = std::clamp(response, 0.0f, 1.0f);
-    aim_smooth_control = std::clamp(smooth, 0.0f, 1.0f);
-    aim_stickiness_control = std::clamp(stick, 0.0f, 1.0f);
+    auto clampUnit = [](float value) {
+        if (value < 0.0f) return 0.0f;
+        if (value > 1.0f) return 1.0f;
+        return value;
+    };
+
+    aim_response_control = clampUnit(response);
+    aim_smooth_control = clampUnit(smooth);
+    aim_stickiness_control = clampUnit(stick);
 
     const float baseMin = 0.18f;
     const float baseMax = 0.35f;
@@ -724,15 +730,21 @@ void Config::deriveAimProfileFromRaw()
     float respFromNear = 1.0f - (nearRadius - 9.0f) / 18.0f;
 
     float response = (respFromMin + respFromMax + respFromNear) / 3.0f;
-    aim_response_control = std::clamp(response, 0.0f, 1.0f);
+    auto clampUnit = [](float value) {
+        if (value < 0.0f) return 0.0f;
+        if (value > 1.0f) return 1.0f;
+        return value;
+    };
+
+    aim_response_control = clampUnit(response);
 
     float smooth = (speedCurveExponent - 1.2f) / 3.3f;
-    aim_smooth_control = std::clamp(smooth, 0.0f, 1.0f);
+    aim_smooth_control = clampUnit(smooth);
 
     float stickFromSnap = 1.0f - (snapRadius - 0.32f) / 0.88f;
     float stickFromNoise = (tracking_noise_floor - 0.08f) / 1.0f;
     float stick = (stickFromSnap + stickFromNoise) * 0.5f;
-    aim_stickiness_control = std::clamp(stick, 0.0f, 1.0f);
+    aim_stickiness_control = clampUnit(stick);
 
     tracking_noise_floor = 0.08f + aim_stickiness_control * 1.0f;
     tracking_prediction_boost = 0.35f + aim_response_control * 0.45f;

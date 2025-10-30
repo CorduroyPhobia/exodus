@@ -636,8 +636,8 @@ void draw_mouse()
         simpleWindChanged = true;
     }
     ImGui::SameLine();
-    const char* smoothDesc = smoothControl < 0.33f ? "Snappy" : (smoothControl < 0.66f ? "Blended" : "Gliding");
-    ImGui::TextDisabled("%s", smoothDesc);
+    const char* windSmoothDesc = smoothControl < 0.33f ? "Snappy" : (smoothControl < 0.66f ? "Blended" : "Gliding");
+    ImGui::TextDisabled("%s", windSmoothDesc);
     ImGui::SameLine();
     show_help_tooltip("Sets how gently the aim eases into the target. Higher smoothness widens the blending zone and shrinks the stick radius, producing a floatier glide.");
 
