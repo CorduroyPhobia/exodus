@@ -725,8 +725,13 @@ void Config::deriveAimProfileFromRaw()
     const float minRange = 0.52f;
     const float maxRange = 1.20f;
 
-    float respFromMin = (minSpeedMultiplier - baseMin) / std::max(minRange, 0.001f);
-    float respFromMax = (maxSpeedMultiplier - baseMax) / std::max(maxRange, 0.001f);
+    auto ensureMinDivisor = [](float candidate) {
+        const float floor = 0.001f;
+        return (candidate < floor) ? floor : candidate;
+    };
+
+    float respFromMin = (minSpeedMultiplier - baseMin) / ensureMinDivisor(minRange);
+    float respFromMax = (maxSpeedMultiplier - baseMax) / ensureMinDivisor(maxRange);
     float respFromNear = 1.0f - (nearRadius - 9.0f) / 18.0f;
 
     float response = (respFromMin + respFromMax + respFromNear) / 3.0f;
