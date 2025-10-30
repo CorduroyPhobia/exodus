@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cfloat>
+#include <cstdio>
 #include <random>
 #include <vector>
 
@@ -43,6 +45,20 @@ float prev_bScope_multiplier = config.bScope_multiplier;
 float prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
 float prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
 float prev_auto_shoot_full_auto_grace_ms = config.auto_shoot_full_auto_grace_ms;
+
+static bool g_show_wind_advanced = false;
+
+static void show_help_tooltip(const char* text)
+{
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
 
 static void draw_target_correction_demo()
 {
@@ -145,7 +161,8 @@ static std::vector<ImVec2> simulate_wind_preview(const WindPreviewSnapshot& snap
     double targetY = static_cast<double>(dy);
     double vx = 0.0, vy = 0.0;
     double wX = 0.0, wY = 0.0;
-    double windM = snap.M;
+    double baseMaxStep = std::max(0.5, static_cast<double>(snap.M));
+    double dynamicMaxStep = baseMaxStep;
     int cx = 0, cy = 0;
 
     double tolerance = std::max(0.1, static_cast<double>(snap.targetRadius));
@@ -155,7 +172,8 @@ static std::vector<ImVec2> simulate_wind_preview(const WindPreviewSnapshot& snap
         ? std::min(minSpeed, static_cast<double>(snap.M))
         : minSpeed;
     double randomnessScale = std::max(0.0, static_cast<double>(snap.randomness));
-    double inertiaFactor = std::clamp(static_cast<double>(snap.inertia), 0.0, 2.0);
+    double inertiaScale = std::clamp(static_cast<double>(snap.inertia), 0.0, 2.0);
+    double inertiaFactor = 0.2 + inertiaScale * 0.6;
     double clipRandomness = std::clamp(static_cast<double>(snap.stepRandomness), 0.0, 1.0);
 
     const int maxIterations = 2048;
@@ -179,27 +197,27 @@ static std::vector<ImVec2> simulate_wind_preview(const WindPreviewSnapshot& snap
         {
             wX /= SQRT3;
             wY /= SQRT3;
-            windM = windM < 3.0 ? dist01(rng) * 3.0 + 3.0 : windM / SQRT5;
+            dynamicMaxStep = dynamicMaxStep < 3.0 ? dist01(rng) * 3.0 + 3.0 : dynamicMaxStep / SQRT5;
         }
 
         double divisor = dist > 1e-6 ? dist : 1.0;
-        vx *= inertiaFactor;
-        vy *= inertiaFactor;
-        vx += wX + snap.G * (targetX - sx) / divisor;
-        vy += wY + snap.G * (targetY - sy) / divisor;
+        vx = vx * inertiaFactor + wX + snap.G * (targetX - sx) / divisor;
+        vy = vy * inertiaFactor + wY + snap.G * (targetY - sy) / divisor;
 
         vx *= speedScale;
         vy *= speedScale;
 
         double vMag = std::hypot(vx, vy);
-        if (vMag > windM && windM > 0.0)
+        if (vMag > dynamicMaxStep && dynamicMaxStep > 0.0)
         {
-            double minFactor = 1.0 - clipRandomness;
-            minFactor = std::clamp(minFactor, 0.0, 1.0);
+            double minFactor = std::clamp(1.0 - clipRandomness, 0.0, 1.0);
             double factor = minFactor;
             if (clipRandomness > 0.0)
+            {
                 factor = minFactor + clipRandomness * dist01(rng);
-            double vClip = windM * factor;
+                factor = std::clamp(factor, 0.0, 1.0);
+            }
+            double vClip = dynamicMaxStep * factor;
             if (vMag > 0.0)
             {
                 vx = (vx / vMag) * vClip;
@@ -516,8 +534,81 @@ void draw_mouse()
         config.saveConfig();
     }
 
-    if (config.wind_mouse_enabled)
+    bool simpleWindChanged = false;
+
+    float followControl = ImSaturate((config.wind_G - 6.0f) / 26.0f);
+    float smoothControl = ImSaturate((config.wind_D - 2.5f) / 18.0f);
+    float jitterControl = ImSaturate(config.wind_randomness / 2.0f);
+
+    if (ImGui::SliderFloat("Follow speed", &followControl, 0.0f, 1.0f, "%.0f%%"))
     {
+        config.wind_G = 6.0f + followControl * 26.0f;
+        config.wind_speed_multiplier = 0.45f + followControl * 1.10f;
+        config.wind_min_velocity = followControl * 6.0f;
+        simpleWindChanged = true;
+    }
+    ImGui::SameLine();
+    const char* followDesc = followControl < 0.33f ? "Relaxed" : (followControl < 0.66f ? "Balanced" : "Snappy");
+    ImGui::TextDisabled("%s", followDesc);
+    ImGui::SameLine();
+    show_help_tooltip("Controls how quickly the cursor commits to the target. Higher values accelerate harder and raise the minimum speed, making the aim more aggressive.");
+
+    if (ImGui::SliderFloat("Smoothness", &smoothControl, 0.0f, 1.0f, "%.0f%%"))
+    {
+        config.wind_D = 2.5f + smoothControl * 18.0f;
+        config.wind_target_radius = 0.3f + (1.0f - smoothControl) * 1.2f;
+        config.wind_M = 4.0f + (1.0f - smoothControl) * 12.0f;
+        simpleWindChanged = true;
+    }
+    ImGui::SameLine();
+    const char* smoothDesc = smoothControl < 0.33f ? "Snappy" : (smoothControl < 0.66f ? "Blended" : "Gliding");
+    ImGui::TextDisabled("%s", smoothDesc);
+    ImGui::SameLine();
+    show_help_tooltip("Sets how gently the aim eases into the target. Higher smoothness widens the blending zone and shrinks the stick radius, producing a floatier glide.");
+
+    if (ImGui::SliderFloat("Human jitter", &jitterControl, 0.0f, 1.0f, "%.0f%%"))
+    {
+        config.wind_randomness = jitterControl * 2.0f;
+        config.wind_step_randomness = 0.15f + jitterControl * 0.7f;
+        config.wind_W = 4.0f + jitterControl * 24.0f;
+        simpleWindChanged = true;
+    }
+    ImGui::SameLine();
+    const char* jitterDesc = jitterControl < 0.33f ? "Minimal" : (jitterControl < 0.66f ? "Natural" : "Chaotic");
+    ImGui::TextDisabled("%s", jitterDesc);
+    ImGui::SameLine();
+    show_help_tooltip("Introduces subtle wobble to the motion. Higher values randomize both the wind gusts and the velocity clipping to mimic human imperfections.");
+
+    if (simpleWindChanged)
+    {
+        float inertiaMix = 0.35f + smoothControl * 0.8f + followControl * 0.25f;
+        config.wind_inertia = ImClamp(inertiaMix, 0.0f, 2.0f);
+        config.saveConfig();
+    }
+
+    ImGui::Dummy(ImVec2(0, 4));
+    ImGui::TextDisabled("Tracking summary");
+    float followStrength = config.wind_G * config.wind_speed_multiplier;
+    float followScore = ImSaturate(followStrength / 180.0f);
+    float smoothScore = ImSaturate(config.wind_inertia / 1.6f);
+    float stickScore = ImSaturate(1.0f - (config.wind_target_radius - 0.1f) / (5.0f - 0.1f));
+
+    char buffer[64];
+    std::snprintf(buffer, sizeof(buffer), "Follow strength %d%%", static_cast<int>(std::round(followScore * 100.0f)));
+    ImGui::ProgressBar(followScore, ImVec2(-FLT_MIN, 0.0f), buffer);
+    std::snprintf(buffer, sizeof(buffer), "Momentum %.0f%%", smoothScore * 100.0f);
+    ImGui::ProgressBar(smoothScore, ImVec2(-FLT_MIN, 0.0f), buffer);
+    std::snprintf(buffer, sizeof(buffer), "Stickiness %.0f%%", stickScore * 100.0f);
+    ImGui::ProgressBar(stickScore, ImVec2(-FLT_MIN, 0.0f), buffer);
+
+    ImGui::Checkbox("Show advanced wind controls", &g_show_wind_advanced);
+    ImGui::TextDisabled("Advanced sliders expose the raw WindMouse parameters.");
+
+    if (g_show_wind_advanced && config.wind_mouse_enabled)
+    {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.58f, 0.78f, 1.0f, 1.0f), "Advanced WindMouse parameters");
+
         if (ImGui::SliderFloat("Gravity force", &config.wind_G, 4.00f, 40.00f, "%.2f"))
         {
             config.saveConfig();
@@ -581,15 +672,15 @@ void draw_mouse()
         if (ImGui::Button("Reset Wind Mouse to default settings"))
         {
             config.wind_G = 18.0f;
-            config.wind_W = 15.0f;
+            config.wind_W = 16.0f;
             config.wind_M = 10.0f;
-            config.wind_D = 8.0f;
-            config.wind_speed_multiplier = 1.0f;
-            config.wind_min_velocity = 0.0f;
-            config.wind_target_radius = 1.0f;
+            config.wind_D = 9.0f;
+            config.wind_speed_multiplier = 1.05f;
+            config.wind_min_velocity = 0.5f;
+            config.wind_target_radius = 0.9f;
             config.wind_randomness = 1.0f;
             config.wind_inertia = 1.0f;
-            config.wind_step_randomness = 0.5f;
+            config.wind_step_randomness = 0.55f;
             config.saveConfig();
         }
     }

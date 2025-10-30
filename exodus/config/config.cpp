@@ -251,16 +251,16 @@ bool Config::loadConfig(const std::string& filename)
 
         // Wind mouse
         wind_mouse_enabled = true;
-        wind_G = 10.0f;
-        wind_W = 5.0f;
-        wind_M = 5.0f;
-        wind_D = 3.0f;
-        wind_speed_multiplier = 1.0f;
-        wind_min_velocity = 0.0f;
-        wind_target_radius = 1.0f;
+        wind_G = 18.0f;
+        wind_W = 16.0f;
+        wind_M = 10.0f;
+        wind_D = 9.0f;
+        wind_speed_multiplier = 1.05f;
+        wind_min_velocity = 0.5f;
+        wind_target_radius = 0.9f;
         wind_randomness = 1.0f;
         wind_inertia = 1.0f;
-        wind_step_randomness = 0.5f;
+        wind_step_randomness = 0.55f;
 
         // Mouse shooting
         auto_shoot = false;
@@ -534,16 +534,16 @@ bool Config::loadConfig(const std::string& filename)
 
     // Wind mouse
     wind_mouse_enabled = get_bool("wind_mouse_enabled", true);
-    wind_G = (float)get_double("wind_G", 10.0f);
-    wind_W = (float)get_double("wind_W", 5.0f);
-    wind_M = (float)get_double("wind_M", 5.0f);
-    wind_D = (float)get_double("wind_D", 3.0f);
-    wind_speed_multiplier = (float)get_double("wind_speed_multiplier", 1.0f);
-    wind_min_velocity = (float)get_double("wind_min_velocity", 0.0f);
-    wind_target_radius = (float)get_double("wind_target_radius", 1.0f);
+    wind_G = (float)get_double("wind_G", 18.0f);
+    wind_W = (float)get_double("wind_W", 16.0f);
+    wind_M = (float)get_double("wind_M", 10.0f);
+    wind_D = (float)get_double("wind_D", 9.0f);
+    wind_speed_multiplier = (float)get_double("wind_speed_multiplier", 1.05f);
+    wind_min_velocity = (float)get_double("wind_min_velocity", 0.5f);
+    wind_target_radius = (float)get_double("wind_target_radius", 0.9f);
     wind_randomness = (float)get_double("wind_randomness", 1.0f);
     wind_inertia = (float)get_double("wind_inertia", 1.0f);
-    wind_step_randomness = (float)get_double("wind_step_randomness", 0.5f);
+    wind_step_randomness = (float)get_double("wind_step_randomness", 0.55f);
 
     if (wind_speed_multiplier < 0.1f)
         wind_speed_multiplier = 0.1f;

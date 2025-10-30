@@ -9,6 +9,7 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <random>
 
 #include "mouse.h"
 #include "capture.h"
@@ -175,8 +176,15 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
         ? std::min(minSpeed, static_cast<double>(wind_max_step_config))
         : minSpeed;
     double randomnessScale = std::max(0.0, static_cast<double>(wind_randomness));
-    double inertiaFactor = std::clamp(static_cast<double>(wind_inertia), 0.0, 2.0);
+    double inertiaScale = std::clamp(static_cast<double>(wind_inertia), 0.0, 2.0);
+    double inertiaFactor = 0.2 + inertiaScale * 0.6; // 0 -> 0.2 (very damped), 2 -> 1.4 (high carry)
     double clipRandomness = std::clamp(static_cast<double>(wind_step_randomness), 0.0, 1.0);
+    double baseMaxStep = std::max(0.5, static_cast<double>(wind_M));
+    double dynamicMaxStep = baseMaxStep;
+
+    static thread_local std::mt19937 rng{ std::random_device{}() };
+    std::uniform_real_distribution<double> distNegPos(-1.0, 1.0);
+    std::uniform_real_distribution<double> dist01(0.0, 1.0);
 
     const int maxIterations = 4096;
     int iterations = 0;
@@ -192,36 +200,38 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
 
         if (dist >= wind_D)
         {
-            double randX = ((double)rand() / RAND_MAX * 2.0 - 1.0);
-            double randY = ((double)rand() / RAND_MAX * 2.0 - 1.0);
+            double randX = distNegPos(rng);
+            double randY = distNegPos(rng);
             wX = wX / SQRT3 + randX * wMag / SQRT5 * randomnessScale;
             wY = wY / SQRT3 + randY * wMag / SQRT5 * randomnessScale;
         }
         else
         {
-            wX /= SQRT3;  wY /= SQRT3;
-            wind_M = wind_M < 3.0 ? ((double)rand() / RAND_MAX) * 3.0 + 3.0 : wind_M / SQRT5;
+            wX /= SQRT3;
+            wY /= SQRT3;
+            dynamicMaxStep = dynamicMaxStep < 3.0
+                ? dist01(rng) * 3.0 + 3.0
+                : dynamicMaxStep / SQRT5;
         }
 
         double divisor = dist > 1e-6 ? dist : 1.0;
-        vx *= inertiaFactor;
-        vy *= inertiaFactor;
-        vx += wX + wind_G * (dxF - sx) / divisor;
-        vy += wY + wind_G * (dyF - sy) / divisor;
+        vx = vx * inertiaFactor + wX + wind_G * (dxF - sx) / divisor;
+        vy = vy * inertiaFactor + wY + wind_G * (dyF - sy) / divisor;
 
         vx *= speedScale;
         vy *= speedScale;
 
         double vMag = std::hypot(vx, vy);
-        if (vMag > wind_M && wind_M > 0.0)
+        if (vMag > dynamicMaxStep && dynamicMaxStep > 0.0)
         {
-            double minFactor = 1.0 - clipRandomness;
-            minFactor = std::clamp(minFactor, 0.0, 1.0);
-            double vClip = wind_M * minFactor;
+            double minFactor = std::clamp(1.0 - clipRandomness, 0.0, 1.0);
+            double factor = minFactor;
             if (clipRandomness > 0.0)
             {
-                vClip = wind_M * (minFactor + clipRandomness * ((double)rand() / RAND_MAX));
+                factor = minFactor + clipRandomness * dist01(rng);
+                factor = std::clamp(factor, 0.0, 1.0);
             }
+            double vClip = dynamicMaxStep * factor;
             if (vMag > 0.0)
             {
                 vx = (vx / vMag) * vClip;
@@ -411,19 +421,37 @@ bool MouseThread::check_target_in_scope(double target_x, double target_y, double
 
 void MouseThread::moveMouse(const AimbotTarget& target)
 {
-    std::lock_guard lg(input_method_mutex);
+    int stepX = 0;
+    int stepY = 0;
+    bool useWind = false;
 
-    auto predicted = predict_target_position(
-        target.x + target.w / 2.0,
-        target.y + target.h / 2.0);
+    {
+        std::lock_guard lg(input_method_mutex);
 
-    auto mv = calc_movement(predicted.first, predicted.second);
-    auto steps = resolveMovementSteps(mv.first, mv.second);
-    if (steps.first == 0 && steps.second == 0)
+        auto predicted = predict_target_position(
+            target.x + target.w / 2.0,
+            target.y + target.h / 2.0);
+
+        auto mv = calc_movement(predicted.first, predicted.second);
+        auto steps = resolveMovementSteps(mv.first, mv.second);
+        stepX = steps.first;
+        stepY = steps.second;
+        useWind = wind_mouse_enabled;
+    }
+
+    if (stepX == 0 && stepY == 0)
     {
         return;
     }
-    queueMove(steps.first, steps.second);
+
+    if (useWind)
+    {
+        windMouseMoveRelative(stepX, stepY);
+    }
+    else
+    {
+        queueMove(stepX, stepY);
+    }
 }
 
 void MouseThread::moveMousePivot(double pivotX, double pivotY)
@@ -433,73 +461,83 @@ void MouseThread::moveMousePivot(double pivotX, double pivotY)
 
 void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMovement)
 {
-    std::lock_guard lg(input_method_mutex);
+    int mx = 0;
+    int my = 0;
+    bool shouldMove = false;
+    bool useWind = false;
 
-    auto current_time = std::chrono::steady_clock::now();
-
-    if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
     {
-        prev_time = current_time;
-        prev_x = pivotX;
-        prev_y = pivotY;
-        prev_velocity_x = 0.0;
-        prev_velocity_y = 0.0;
+        std::lock_guard lg(input_method_mutex);
 
-        if (!allowMovement)
-        {
-            return;
-        }
+        auto current_time = std::chrono::steady_clock::now();
 
-        auto m0 = calc_movement(pivotX, pivotY);
-        auto steps0 = resolveMovementSteps(m0.first, m0.second);
-        int mx0 = steps0.first;
-        int my0 = steps0.second;
-        if (mx0 == 0 && my0 == 0)
+        if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
         {
-            return;
-        }
+            prev_time = current_time;
+            prev_x = pivotX;
+            prev_y = pivotY;
+            prev_velocity_x = 0.0;
+            prev_velocity_y = 0.0;
 
-        if (wind_mouse_enabled)
-        {
-            windMouseMoveRelative(mx0, my0);
+            if (!allowMovement)
+            {
+                return;
+            }
+
+            auto m0 = calc_movement(pivotX, pivotY);
+            auto steps0 = resolveMovementSteps(m0.first, m0.second);
+            mx = steps0.first;
+            my = steps0.second;
+            if (mx == 0 && my == 0)
+            {
+                return;
+            }
+
+            shouldMove = true;
+            useWind = wind_mouse_enabled;
         }
         else
         {
-            queueMove(mx0, my0);
+            double dt = std::chrono::duration<double>(current_time - prev_time).count();
+            prev_time = current_time;
+            dt = std::max(dt, 1e-8);
+
+            double vx = std::clamp((pivotX - prev_x) / dt, -20000.0, 20000.0);
+            double vy = std::clamp((pivotY - prev_y) / dt, -20000.0, 20000.0);
+            prev_x = pivotX;
+            prev_y = pivotY;
+            prev_velocity_x = vx;
+            prev_velocity_y = vy;
+
+            if (!allowMovement)
+            {
+                return;
+            }
+
+            double predX = pivotX + vx * prediction_interval + vx * 0.002;
+            double predY = pivotY + vy * prediction_interval + vy * 0.002;
+
+            auto mv = calc_movement(predX, predY);
+            auto steps = resolveMovementSteps(mv.first, mv.second);
+            mx = steps.first;
+            my = steps.second;
+
+            if (mx == 0 && my == 0)
+            {
+                return;
+            }
+
+            shouldMove = true;
+            useWind = wind_mouse_enabled;
         }
-        return;
     }
 
-    double dt = std::chrono::duration<double>(current_time - prev_time).count();
-    prev_time = current_time;
-    dt = std::max(dt, 1e-8);
-
-    double vx = std::clamp((pivotX - prev_x) / dt, -20000.0, 20000.0);
-    double vy = std::clamp((pivotY - prev_y) / dt, -20000.0, 20000.0);
-    prev_x = pivotX;
-    prev_y = pivotY;
-    prev_velocity_x = vx;
-    prev_velocity_y = vy;
-
-    if (!allowMovement)
+    if (!shouldMove)
     {
         return;
     }
 
-    double predX = pivotX + vx * prediction_interval + vx * 0.002;
-    double predY = pivotY + vy * prediction_interval + vy * 0.002;
-
-    auto mv = calc_movement(predX, predY);
-    auto steps = resolveMovementSteps(mv.first, mv.second);
-    int mx = steps.first;
-    int my = steps.second;
-
-    if (mx == 0 && my == 0)
-    {
-        return;
-    }
-
-    if (wind_mouse_enabled)
+    if (useWind)
     {
         windMouseMoveRelative(mx, my);
     }
