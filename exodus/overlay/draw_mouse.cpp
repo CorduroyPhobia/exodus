@@ -46,6 +46,7 @@ float prev_auto_shoot_fire_delay_ms = config.auto_shoot_fire_delay_ms;
 float prev_auto_shoot_press_duration_ms = config.auto_shoot_press_duration_ms;
 float prev_auto_shoot_full_auto_grace_ms = config.auto_shoot_full_auto_grace_ms;
 
+static bool g_show_aim_advanced = false;
 static bool g_show_wind_advanced = false;
 
 static void show_help_tooltip(const char* text)
@@ -403,38 +404,112 @@ void draw_mouse()
     ImGui::SliderInt("FOV X", &config.fovX, 10, 120);
     ImGui::SliderInt("FOV Y", &config.fovY, 10, 120);
 
-    ImGui::SeparatorText("Speed Multiplier");
-    ImGui::SliderFloat("Min Speed Multiplier", &config.minSpeedMultiplier, 0.1f, 5.0f, "%.1f");
-    ImGui::SliderFloat("Max Speed Multiplier", &config.maxSpeedMultiplier, 0.1f, 5.0f, "%.1f");
+    ImGui::SeparatorText("Aim behaviour");
 
-    ImGui::SeparatorText("Prediction");
-    ImGui::SliderFloat("Prediction Interval", &config.predictionInterval, 0.00f, 0.5f, "%.2f");
-    if (config.predictionInterval == 0.00f)
+    float response = config.aim_response_control;
+    if (ImGui::SliderFloat("Responsiveness", &response, 0.0f, 1.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp))
     {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(255, 0, 0, 255), "-> Disabled");
+        config.applyAimProfile(response, config.aim_smooth_control, config.aim_stickiness_control);
+        config.saveConfig();
     }
-    else
+    ImGui::SameLine();
+    const char* responseDesc = response < 0.33f ? "Calm" : (response < 0.66f ? "Balanced" : "Aggressive");
+    ImGui::TextDisabled("%s", responseDesc);
+    ImGui::SameLine();
+    show_help_tooltip("Sets how quickly the cursor commits to the target. Higher values accelerate harder and increase predictive lead.");
+
+    float smooth = config.aim_smooth_control;
+    if (ImGui::SliderFloat("Smoothness##aim_profile", &smooth, 0.0f, 1.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp))
     {
-        
-        if (ImGui::SliderInt("Future Positions", &config.prediction_futurePositions, 1, 40))
+        config.applyAimProfile(config.aim_response_control, smooth, config.aim_stickiness_control);
+        config.saveConfig();
+    }
+    ImGui::SameLine();
+    const char* smoothDesc = smooth < 0.33f ? "Snappy" : (smooth < 0.66f ? "Blended" : "Gliding");
+    ImGui::TextDisabled("%s", smoothDesc);
+    ImGui::SameLine();
+    show_help_tooltip("Controls how much the motion eases versus snapping in a straight line. Higher values blend the curve and reduce visible micro-jitter.");
+
+    float stick = config.aim_stickiness_control;
+    if (ImGui::SliderFloat("Stickiness", &stick, 0.0f, 1.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp))
+    {
+        config.applyAimProfile(config.aim_response_control, config.aim_smooth_control, stick);
+        config.saveConfig();
+    }
+    ImGui::SameLine();
+    const char* stickDesc = stick < 0.33f ? "Loose" : (stick < 0.66f ? "Focused" : "Locked");
+    ImGui::TextDisabled("%s", stickDesc);
+    ImGui::SameLine();
+    show_help_tooltip("Sets how firmly the aim settles on the last few pixels. Higher values widen the stick zone and raise the motion noise floor, keeping the cursor planted once centred.");
+
+    double timeConstant = 0.012 + (0.15 * (1.0 - static_cast<double>(config.aim_response_control)));
+    double halfLifeMs = std::log(2.0) * timeConstant * 1000.0;
+    double leadMs = (config.predictionInterval + 0.05 * config.tracking_prediction_boost) * 1000.0;
+    ImGui::TextDisabled("Half-life %.0f ms   Lead %.0f ms   Stick radius %.2f px", halfLifeMs, leadMs, config.snapRadius);
+    ImGui::TextDisabled("Speed window %.2f× – %.2f× counts   Noise floor %.2f px", config.minSpeedMultiplier, config.maxSpeedMultiplier, config.tracking_noise_floor);
+
+    ImGui::Checkbox("Show advanced aim tuning", &g_show_aim_advanced);
+    ImGui::SameLine();
+    show_help_tooltip("Reveal the legacy aim sliders for manual tweaking. Changes automatically sync back to the profile controls above.");
+
+    if (g_show_aim_advanced)
+    {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.58f, 0.78f, 1.0f, 1.0f), "Advanced aim parameters");
+
+        bool aimAdvancedChanged = false;
+        aimAdvancedChanged |= ImGui::SliderFloat("Min Speed Multiplier", &config.minSpeedMultiplier, 0.1f, 5.0f, "%.1f");
+        aimAdvancedChanged |= ImGui::SliderFloat("Max Speed Multiplier", &config.maxSpeedMultiplier, 0.1f, 5.0f, "%.1f");
+
+        ImGui::SeparatorText("Prediction");
+        if (ImGui::SliderFloat("Prediction Interval", &config.predictionInterval, 0.00f, 0.5f, "%.2f"))
         {
-            config.saveConfig();
+            aimAdvancedChanged = true;
+        }
+        if (config.predictionInterval == 0.00f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(255, 0, 0, 255), "-> Disabled");
+        }
+        else
+        {
+            if (ImGui::SliderInt("Future Positions", &config.prediction_futurePositions, 1, 40))
+            {
+                config.saveConfig();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Draw##draw_future_positions_button", &config.draw_futurePositions))
+            {
+                config.saveConfig();
+            }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Draw##draw_future_positions_button", &config.draw_futurePositions))
+        ImGui::SeparatorText("Target correction");
+        if (ImGui::SliderFloat("Snap Radius", &config.snapRadius, 0.1f, 5.0f, "%.1f"))
         {
+            aimAdvancedChanged = true;
+        }
+        if (ImGui::SliderFloat("Near Radius", &config.nearRadius, 1.0f, 40.0f, "%.1f"))
+        {
+            aimAdvancedChanged = true;
+        }
+        if (ImGui::SliderFloat("Speed Curve Exponent", &config.speedCurveExponent, 0.1f, 10.0f, "%.1f"))
+        {
+            aimAdvancedChanged = true;
+        }
+        if (ImGui::SliderFloat("Snap Boost Factor", &config.snapBoostFactor, 0.01f, 4.00f, "%.2f"))
+        {
+            aimAdvancedChanged = true;
+        }
+        draw_target_correction_demo();
+
+        if (aimAdvancedChanged)
+        {
+            config.deriveAimProfileFromRaw();
             config.saveConfig();
         }
     }
-
-    ImGui::SeparatorText("Target corrention");
-    ImGui::SliderFloat("Snap Radius", &config.snapRadius, 0.1f, 5.0f, "%.1f");
-    ImGui::SliderFloat("Near Radius", &config.nearRadius, 1.0f, 40.0f, "%.1f");
-    ImGui::SliderFloat("Speed Curve Exponent", &config.speedCurveExponent, 0.1f, 10.0f, "%.1f");
-    ImGui::SliderFloat("Snap Boost Factor", &config.snapBoostFactor, 0.01f, 4.00f, "%.2f");
-    draw_target_correction_demo();
 
     ImGui::SeparatorText("Mouse Sensitivity");
 
