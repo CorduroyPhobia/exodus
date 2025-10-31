@@ -32,6 +32,10 @@ public:
     bool shooting_range_targets;
     bool auto_aim;
     bool auto_hip_aim;
+    bool prevent_targeting_friendly_marker;
+    float friendly_marker_scan_height_ratio;
+    float friendly_marker_scan_width_ratio;
+    float friendly_marker_color_tolerance;
 
     // Mouse
     int fovX;

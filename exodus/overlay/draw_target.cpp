@@ -26,6 +26,10 @@ bool prev_auto_aim = config.auto_aim;
 bool prev_auto_hip_aim = config.auto_hip_aim;
 bool prev_easynorecoil = config.easynorecoil;
 float prev_easynorecoilstrength = config.easynorecoilstrength;
+bool prev_prevent_targeting_friendly_marker = config.prevent_targeting_friendly_marker;
+float prev_friendly_marker_scan_height_ratio = config.friendly_marker_scan_height_ratio;
+float prev_friendly_marker_scan_width_ratio = config.friendly_marker_scan_width_ratio;
+float prev_friendly_marker_color_tolerance = config.friendly_marker_color_tolerance;
 
 void draw_target()
 {
@@ -80,6 +84,14 @@ void draw_target()
     ImGui::SameLine();
     ImGui::Checkbox("Auto Hip-Aim", &config.auto_hip_aim);
 
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.55f, 0.86f, 1.0f, 1.0f), "Friendly Marker Safety");
+    ImGui::Checkbox("Ignore targets with teammate marker", &config.prevent_targeting_friendly_marker);
+    ImGui::SliderFloat("Marker scan height (x target height)", &config.friendly_marker_scan_height_ratio, 0.05f, 0.60f, "%.2f");
+    ImGui::SliderFloat("Marker scan width (x target width)", &config.friendly_marker_scan_width_ratio, 0.20f, 1.00f, "%.2f");
+    ImGui::SliderFloat("Marker color tolerance", &config.friendly_marker_color_tolerance, 5.0f, 200.0f, "%.0f");
+    ImGui::TextDisabled("Increase tolerance or scan size if teammate markers are missed.");
+
     if (prev_disable_headshot != config.disable_headshot ||
         prev_body_y_offset != config.body_y_offset ||
         prev_head_y_offset != config.head_y_offset ||
@@ -90,7 +102,11 @@ void draw_target()
         prev_auto_aim != config.auto_aim ||
         prev_auto_hip_aim != config.auto_hip_aim ||
         prev_easynorecoil != config.easynorecoil ||
-        prev_easynorecoilstrength != config.easynorecoilstrength)
+        prev_easynorecoilstrength != config.easynorecoilstrength ||
+        prev_prevent_targeting_friendly_marker != config.prevent_targeting_friendly_marker ||
+        prev_friendly_marker_scan_height_ratio != config.friendly_marker_scan_height_ratio ||
+        prev_friendly_marker_scan_width_ratio != config.friendly_marker_scan_width_ratio ||
+        prev_friendly_marker_color_tolerance != config.friendly_marker_color_tolerance)
     {
         prev_disable_headshot = config.disable_headshot;
         prev_body_y_offset = config.body_y_offset;
@@ -103,6 +119,10 @@ void draw_target()
         prev_auto_hip_aim = config.auto_hip_aim;
         prev_easynorecoil = config.easynorecoil;
         prev_easynorecoilstrength = config.easynorecoilstrength;
+        prev_prevent_targeting_friendly_marker = config.prevent_targeting_friendly_marker;
+        prev_friendly_marker_scan_height_ratio = config.friendly_marker_scan_height_ratio;
+        prev_friendly_marker_scan_width_ratio = config.friendly_marker_scan_width_ratio;
+        prev_friendly_marker_color_tolerance = config.friendly_marker_color_tolerance;
         config.saveConfig();
     }
 }
