@@ -236,7 +236,7 @@ void DirectMLDetector::processFrame(const cv::Mat& frame)
         return;
     }
     std::unique_lock<std::mutex> lock(inferenceMutex);
-    currentFrame = frame.clone();
+    currentFrame = frame;
     frameReady = true;
     inferenceCV.notify_one();
 }
