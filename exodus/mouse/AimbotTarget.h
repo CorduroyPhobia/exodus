@@ -24,4 +24,6 @@ AimbotTarget* sortTargets(
     bool disableHeadshot
 );
 
+void getFriendlyMarkerDebugInfo(int& sampleHeightPx, int& sampleWidthPx, int& bottomOffsetPx);
+
 #endif // AIMBOTTARGET_H
