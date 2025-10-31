@@ -198,7 +198,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
 
             {
                 std::lock_guard<std::mutex> lock(frameMutex);
-                latestFrame = screenshotCpu.clone();
+                latestFrame = screenshotCpu;
                 if (frameQueue.size() >= config.batch_size)
                     frameQueue.pop_front();
                 frameQueue.push_back(latestFrame);
