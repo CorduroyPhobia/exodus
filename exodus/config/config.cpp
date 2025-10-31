@@ -101,6 +101,11 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "nearRadius = " << cfg.nearRadius << "\n"
         << "speedCurveExponent = " << cfg.speedCurveExponent << "\n"
         << "snapBoostFactor = " << cfg.snapBoostFactor << "\n"
+        << "aim_response_control = " << cfg.aim_response_control << "\n"
+        << "aim_smooth_control = " << cfg.aim_smooth_control << "\n"
+        << "aim_stickiness_control = " << cfg.aim_stickiness_control << "\n"
+        << "tracking_noise_floor = " << cfg.tracking_noise_floor << "\n"
+        << "tracking_prediction_boost = " << cfg.tracking_prediction_boost << "\n"
 
         << "easynorecoil = " << (cfg.easynorecoil ? "true" : "false") << "\n"
         << std::fixed << std::setprecision(1)
@@ -115,7 +120,10 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "wind_D = " << cfg.wind_D << "\n"
         << "wind_speed_multiplier = " << cfg.wind_speed_multiplier << "\n"
         << "wind_min_velocity = " << cfg.wind_min_velocity << "\n"
-        << "wind_target_radius = " << cfg.wind_target_radius << "\n\n";
+        << "wind_target_radius = " << cfg.wind_target_radius << "\n"
+        << "wind_randomness = " << cfg.wind_randomness << "\n"
+        << "wind_inertia = " << cfg.wind_inertia << "\n"
+        << "wind_step_randomness = " << cfg.wind_step_randomness << "\n\n";
 
     // Mouse shooting
     file << "# Mouse shooting\n"
@@ -225,17 +233,17 @@ bool Config::loadConfig(const std::string& filename)
         // Mouse
         fovX = 96;
         fovY = 73;
-        minSpeedMultiplier = 0.19f;
-        maxSpeedMultiplier = 0.20f;
 
-        predictionInterval = 0.01f;
+        aim_response_control = 0.62f;
+        aim_smooth_control = 0.55f;
+        aim_stickiness_control = 0.58f;
+        tracking_noise_floor = 0.0f;
+        tracking_prediction_boost = 0.0f;
+
+        applyAimProfile(aim_response_control, aim_smooth_control, aim_stickiness_control);
+
         prediction_futurePositions = 9;
         draw_futurePositions = true;
-
-        snapRadius = 0.62f;
-        nearRadius = 13.89f;
-        speedCurveExponent = 1.81f;
-        snapBoostFactor = 1.14f;
 
         sens = 0.54;
         yaw = 0.02;
@@ -248,13 +256,16 @@ bool Config::loadConfig(const std::string& filename)
 
         // Wind mouse
         wind_mouse_enabled = true;
-        wind_G = 10.0f;
-        wind_W = 5.0f;
-        wind_M = 5.0f;
-        wind_D = 3.0f;
-        wind_speed_multiplier = 1.0f;
-        wind_min_velocity = 0.0f;
-        wind_target_radius = 1.0f;
+        wind_G = 18.0f;
+        wind_W = 16.0f;
+        wind_M = 10.0f;
+        wind_D = 9.0f;
+        wind_speed_multiplier = 1.05f;
+        wind_min_velocity = 0.5f;
+        wind_target_radius = 0.9f;
+        wind_randomness = 1.0f;
+        wind_inertia = 1.0f;
+        wind_step_randomness = 0.55f;
 
         // Mouse shooting
         auto_shoot = false;
@@ -523,18 +534,43 @@ bool Config::loadConfig(const std::string& filename)
     speedCurveExponent = (float)get_double("speedCurveExponent", 1.81);
     snapBoostFactor = (float)get_double("snapBoostFactor", 1.14);
 
+    aim_response_control = (float)get_double("aim_response_control", -1.0);
+    aim_smooth_control = (float)get_double("aim_smooth_control", -1.0);
+    aim_stickiness_control = (float)get_double("aim_stickiness_control", -1.0);
+    tracking_noise_floor = (float)get_double("tracking_noise_floor", 0.0);
+    tracking_prediction_boost = (float)get_double("tracking_prediction_boost", 0.0);
+
+    if (aim_response_control < 0.0f || aim_smooth_control < 0.0f || aim_stickiness_control < 0.0f)
+    {
+        deriveAimProfileFromRaw();
+    }
+    else
+    {
+        aim_response_control = std::clamp(aim_response_control, 0.0f, 1.0f);
+        aim_smooth_control = std::clamp(aim_smooth_control, 0.0f, 1.0f);
+        aim_stickiness_control = std::clamp(aim_stickiness_control, 0.0f, 1.0f);
+
+        if (tracking_noise_floor <= 0.0f)
+            tracking_noise_floor = 0.12f + aim_stickiness_control * 0.9f;
+        if (tracking_prediction_boost <= 0.0f)
+            tracking_prediction_boost = 0.35f + aim_response_control * 0.45f;
+    }
+
     easynorecoil = get_bool("easynorecoil", false);
     easynorecoilstrength = (float)get_double("easynorecoilstrength", 0.0);
 
     // Wind mouse
     wind_mouse_enabled = get_bool("wind_mouse_enabled", true);
-    wind_G = (float)get_double("wind_G", 10.0f);
-    wind_W = (float)get_double("wind_W", 5.0f);
-    wind_M = (float)get_double("wind_M", 5.0f);
-    wind_D = (float)get_double("wind_D", 3.0f);
-    wind_speed_multiplier = (float)get_double("wind_speed_multiplier", 1.0f);
-    wind_min_velocity = (float)get_double("wind_min_velocity", 0.0f);
-    wind_target_radius = (float)get_double("wind_target_radius", 1.0f);
+    wind_G = (float)get_double("wind_G", 18.0f);
+    wind_W = (float)get_double("wind_W", 16.0f);
+    wind_M = (float)get_double("wind_M", 10.0f);
+    wind_D = (float)get_double("wind_D", 9.0f);
+    wind_speed_multiplier = (float)get_double("wind_speed_multiplier", 1.05f);
+    wind_min_velocity = (float)get_double("wind_min_velocity", 0.5f);
+    wind_target_radius = (float)get_double("wind_target_radius", 0.9f);
+    wind_randomness = (float)get_double("wind_randomness", 1.0f);
+    wind_inertia = (float)get_double("wind_inertia", 1.0f);
+    wind_step_randomness = (float)get_double("wind_step_randomness", 0.55f);
 
     if (wind_speed_multiplier < 0.1f)
         wind_speed_multiplier = 0.1f;
@@ -542,6 +578,16 @@ bool Config::loadConfig(const std::string& filename)
         wind_min_velocity = 0.0f;
     if (wind_target_radius < 0.1f)
         wind_target_radius = 0.1f;
+    if (wind_randomness < 0.0f)
+        wind_randomness = 0.0f;
+    if (wind_inertia < 0.0f)
+        wind_inertia = 0.0f;
+    if (wind_inertia > 2.0f)
+        wind_inertia = 2.0f;
+    if (wind_step_randomness < 0.0f)
+        wind_step_randomness = 0.0f;
+    if (wind_step_randomness > 1.0f)
+        wind_step_randomness = 1.0f;
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
@@ -637,6 +683,76 @@ bool Config::savePreset(const std::string& filename, const std::string& presetNa
     writeConfigToStream(file, *this, &presetName);
     file.close();
     return true;
+}
+
+void Config::applyAimProfile(float response, float smooth, float stick)
+{
+    auto clampUnit = [](float value) {
+        if (value < 0.0f) return 0.0f;
+        if (value > 1.0f) return 1.0f;
+        return value;
+    };
+
+    aim_response_control = clampUnit(response);
+    aim_smooth_control = clampUnit(smooth);
+    aim_stickiness_control = clampUnit(stick);
+
+    const float baseMin = 0.18f;
+    const float baseMax = 0.35f;
+    const float minRange = 0.52f;
+    const float maxRange = 1.20f;
+
+    minSpeedMultiplier = baseMin + minRange * aim_response_control;
+    maxSpeedMultiplier = baseMax + maxRange * aim_response_control;
+    if (maxSpeedMultiplier < minSpeedMultiplier + 0.05f)
+        maxSpeedMultiplier = minSpeedMultiplier + 0.05f;
+
+    predictionInterval = 0.006f + 0.028f * aim_response_control;
+    nearRadius = 9.0f + (1.0f - aim_response_control) * 18.0f;
+    snapBoostFactor = 1.05f + 0.5f * aim_response_control;
+
+    speedCurveExponent = 1.2f + 3.3f * aim_smooth_control;
+    snapRadius = 0.32f + (1.0f - aim_stickiness_control) * 0.88f;
+
+    tracking_noise_floor = 0.08f + aim_stickiness_control * 1.0f;
+    tracking_prediction_boost = 0.35f + aim_response_control * 0.45f;
+}
+
+void Config::deriveAimProfileFromRaw()
+{
+    const float baseMin = 0.18f;
+    const float baseMax = 0.35f;
+    const float minRange = 0.52f;
+    const float maxRange = 1.20f;
+
+    auto ensureMinDivisor = [](float candidate) {
+        const float floor = 0.001f;
+        return (candidate < floor) ? floor : candidate;
+    };
+
+    float respFromMin = (minSpeedMultiplier - baseMin) / ensureMinDivisor(minRange);
+    float respFromMax = (maxSpeedMultiplier - baseMax) / ensureMinDivisor(maxRange);
+    float respFromNear = 1.0f - (nearRadius - 9.0f) / 18.0f;
+
+    float response = (respFromMin + respFromMax + respFromNear) / 3.0f;
+    auto clampUnit = [](float value) {
+        if (value < 0.0f) return 0.0f;
+        if (value > 1.0f) return 1.0f;
+        return value;
+    };
+
+    aim_response_control = clampUnit(response);
+
+    float smooth = (speedCurveExponent - 1.2f) / 3.3f;
+    aim_smooth_control = clampUnit(smooth);
+
+    float stickFromSnap = 1.0f - (snapRadius - 0.32f) / 0.88f;
+    float stickFromNoise = (tracking_noise_floor - 0.08f) / 1.0f;
+    float stick = (stickFromSnap + stickFromNoise) * 0.5f;
+    aim_stickiness_control = clampUnit(stick);
+
+    tracking_noise_floor = 0.08f + aim_stickiness_control * 1.0f;
+    tracking_prediction_boost = 0.35f + aim_response_control * 0.45f;
 }
 
 std::pair<double, double> Config::degToCounts(double degX, double degY, double fovNow) const

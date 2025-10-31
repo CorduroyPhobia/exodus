@@ -9,6 +9,7 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <random>
 
 #include "mouse.h"
 #include "capture.h"
@@ -64,7 +65,12 @@ MouseThread::MouseThread(
     wind_speed_multiplier = config.wind_speed_multiplier;
     wind_min_velocity = config.wind_min_velocity;
     wind_target_radius = config.wind_target_radius;
+    wind_randomness = config.wind_randomness;
+    wind_inertia = config.wind_inertia;
+    wind_step_randomness = config.wind_step_randomness;
     wind_max_step_config = config.wind_M;
+
+    resetTrackingFilter();
 
     moveWorker = std::thread(&MouseThread::moveWorkerLoop, this);
 }
@@ -105,10 +111,14 @@ void MouseThread::updateConfig(
     wind_speed_multiplier = config.wind_speed_multiplier;
     wind_min_velocity = config.wind_min_velocity;
     wind_target_radius = config.wind_target_radius;
+    wind_randomness = config.wind_randomness;
+    wind_inertia = config.wind_inertia;
+    wind_step_randomness = config.wind_step_randomness;
     wind_max_step_config = config.wind_M;
 
     residual_move_x = 0.0;
     residual_move_y = 0.0;
+    resetTrackingFilter();
 }
 
 MouseThread::~MouseThread()
@@ -163,11 +173,22 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
     int    cx = 0, cy = 0;
 
     double tolerance = std::max(0.1, static_cast<double>(wind_target_radius));
+    tolerance = std::max(tolerance, static_cast<double>(config.tracking_noise_floor));
     double speedScale = std::max(0.1, static_cast<double>(wind_speed_multiplier));
     double minSpeed = std::max(0.0, static_cast<double>(wind_min_velocity));
     double minSpeedClamp = wind_max_step_config > 0.0
         ? std::min(minSpeed, static_cast<double>(wind_max_step_config))
         : minSpeed;
+    double randomnessScale = std::max(0.0, static_cast<double>(wind_randomness));
+    double inertiaScale = std::clamp(static_cast<double>(wind_inertia), 0.0, 2.0);
+    double inertiaFactor = 0.2 + inertiaScale * 0.6; // 0 -> 0.2 (very damped), 2 -> 1.4 (high carry)
+    double clipRandomness = std::clamp(static_cast<double>(wind_step_randomness), 0.0, 1.0);
+    double baseMaxStep = std::max(0.5, static_cast<double>(wind_M));
+    double dynamicMaxStep = baseMaxStep;
+
+    static thread_local std::mt19937 rng{ std::random_device{}() };
+    std::uniform_real_distribution<double> distNegPos(-1.0, 1.0);
+    std::uniform_real_distribution<double> dist01(0.0, 1.0);
 
     const int maxIterations = 4096;
     int iterations = 0;
@@ -183,26 +204,38 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
 
         if (dist >= wind_D)
         {
-            wX = wX / SQRT3 + ((double)rand() / RAND_MAX * 2.0 - 1.0) * wMag / SQRT5;
-            wY = wY / SQRT3 + ((double)rand() / RAND_MAX * 2.0 - 1.0) * wMag / SQRT5;
+            double randX = distNegPos(rng);
+            double randY = distNegPos(rng);
+            wX = wX / SQRT3 + randX * wMag / SQRT5 * randomnessScale;
+            wY = wY / SQRT3 + randY * wMag / SQRT5 * randomnessScale;
         }
         else
         {
-            wX /= SQRT3;  wY /= SQRT3;
-            wind_M = wind_M < 3.0 ? ((double)rand() / RAND_MAX) * 3.0 + 3.0 : wind_M / SQRT5;
+            wX /= SQRT3;
+            wY /= SQRT3;
+            dynamicMaxStep = dynamicMaxStep < 3.0
+                ? dist01(rng) * 3.0 + 3.0
+                : dynamicMaxStep / SQRT5;
         }
 
         double divisor = dist > 1e-6 ? dist : 1.0;
-        vx += wX + wind_G * (dxF - sx) / divisor;
-        vy += wY + wind_G * (dyF - sy) / divisor;
+        vx = vx * inertiaFactor + wX + wind_G * (dxF - sx) / divisor;
+        vy = vy * inertiaFactor + wY + wind_G * (dyF - sy) / divisor;
 
         vx *= speedScale;
         vy *= speedScale;
 
         double vMag = std::hypot(vx, vy);
-        if (vMag > wind_M && wind_M > 0.0)
+        if (vMag > dynamicMaxStep && dynamicMaxStep > 0.0)
         {
-            double vClip = wind_M / 2.0 + ((double)rand() / RAND_MAX) * wind_M / 2.0;
+            double minFactor = std::clamp(1.0 - clipRandomness, 0.0, 1.0);
+            double factor = minFactor;
+            if (clipRandomness > 0.0)
+            {
+                factor = minFactor + clipRandomness * dist01(rng);
+                factor = std::clamp(factor, 0.0, 1.0);
+            }
+            double vClip = dynamicMaxStep * factor;
             if (vMag > 0.0)
             {
                 vx = (vx / vMag) * vClip;
@@ -263,6 +296,76 @@ void MouseThread::sendMouseRelease()
     SendInput(1, &input, sizeof(INPUT));
 }
 
+void MouseThread::resetTrackingFilter()
+{
+    tracking_filter_initialized = false;
+    filtered_target_x = 0.0;
+    filtered_target_y = 0.0;
+    filtered_velocity_x = 0.0;
+    filtered_velocity_y = 0.0;
+    last_prediction_dt = 1.0 / 120.0;
+}
+
+MouseThread::TrackingEstimate MouseThread::updateTrackingFilter(double target_x, double target_y, double dt)
+{
+    if (!std::isfinite(dt) || dt <= 1e-6)
+        dt = 1.0 / 120.0;
+
+    dt = std::clamp(dt, 1e-4, 0.25);
+
+    if (!tracking_filter_initialized)
+    {
+        tracking_filter_initialized = true;
+        filtered_target_x = target_x;
+        filtered_target_y = target_y;
+        filtered_velocity_x = 0.0;
+        filtered_velocity_y = 0.0;
+        last_prediction_dt = dt;
+        return { filtered_target_x, filtered_target_y, filtered_velocity_x, filtered_velocity_y };
+    }
+
+    double responseControl = std::clamp(static_cast<double>(config.aim_response_control), 0.05, 1.0);
+    double smoothControl = std::clamp(static_cast<double>(config.aim_smooth_control), 0.05, 1.0);
+    double noiseFloor = std::max(0.0, static_cast<double>(config.tracking_noise_floor));
+
+    double dx = target_x - filtered_target_x;
+    double dy = target_y - filtered_target_y;
+    double dist = std::hypot(dx, dy);
+    if (dist < noiseFloor)
+    {
+        target_x = filtered_target_x;
+        target_y = filtered_target_y;
+        dx = 0.0;
+        dy = 0.0;
+    }
+
+    double responseTime = 0.010 + (0.16 * (1.0 - responseControl));
+    double alphaPos = 1.0 - std::exp(-dt / responseTime);
+    alphaPos = std::clamp(alphaPos, 0.0, 1.0);
+
+    double newX = filtered_target_x + dx * alphaPos;
+    double newY = filtered_target_y + dy * alphaPos;
+
+    double instVx = (newX - filtered_target_x) / dt;
+    double instVy = (newY - filtered_target_y) / dt;
+
+    double smoothingTime = 0.025 + (0.22 * (1.0 - smoothControl));
+    double alphaVel = 1.0 - std::exp(-dt / smoothingTime);
+    alphaVel = std::clamp(alphaVel, 0.0, 1.0);
+
+    filtered_velocity_x += (instVx - filtered_velocity_x) * alphaVel;
+    filtered_velocity_y += (instVy - filtered_velocity_y) * alphaVel;
+
+    filtered_velocity_x = std::clamp(filtered_velocity_x, -6000.0, 6000.0);
+    filtered_velocity_y = std::clamp(filtered_velocity_y, -6000.0, 6000.0);
+
+    filtered_target_x = newX;
+    filtered_target_y = newY;
+    last_prediction_dt = dt;
+
+    return { filtered_target_x, filtered_target_y, filtered_velocity_x, filtered_velocity_y };
+}
+
 std::pair<double, double> MouseThread::predict_target_position(double target_x, double target_y)
 {
     auto current_time = std::chrono::steady_clock::now();
@@ -270,6 +373,12 @@ std::pair<double, double> MouseThread::predict_target_position(double target_x, 
     if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
     {
         prev_time = current_time;
+        resetTrackingFilter();
+        tracking_filter_initialized = true;
+        filtered_target_x = target_x;
+        filtered_target_y = target_y;
+        filtered_velocity_x = 0.0;
+        filtered_velocity_y = 0.0;
         prev_x = target_x;
         prev_y = target_y;
         prev_velocity_x = 0.0;
@@ -278,26 +387,33 @@ std::pair<double, double> MouseThread::predict_target_position(double target_x, 
     }
 
     double dt = std::chrono::duration<double>(current_time - prev_time).count();
-    if (dt < 1e-8) dt = 1e-8;
+    if (!std::isfinite(dt) || dt <= 1e-6)
+        dt = 1.0 / 120.0;
 
-    double vx = (target_x - prev_x) / dt;
-    double vy = (target_y - prev_y) / dt;
+    dt = std::clamp(dt, 1e-4, 0.25);
 
-    vx = std::clamp(vx, -20000.0, 20000.0);
-    vy = std::clamp(vy, -20000.0, 20000.0);
+    TrackingEstimate estimate = updateTrackingFilter(target_x, target_y, dt);
 
     prev_time = current_time;
-    prev_x = target_x;
-    prev_y = target_y;
-    prev_velocity_x = vx;
-    prev_velocity_y = vy;
 
-    double predictedX = target_x + vx * prediction_interval;
-    double predictedY = target_y + vy * prediction_interval;
+    prev_x = estimate.x;
+    prev_y = estimate.y;
+    prev_velocity_x = estimate.vx;
+    prev_velocity_y = estimate.vy;
 
     double detectionDelay = dml_detector ? dml_detector->lastInferenceTimeDML.count() : 0.05;
-    predictedX += vx * detectionDelay;
-    predictedY += vy * detectionDelay;
+    detectionDelay = std::clamp(detectionDelay, 0.0, 0.12);
+
+    double responseControl = std::clamp(static_cast<double>(config.aim_response_control), 0.0, 1.0);
+    double boost = config.tracking_prediction_boost > 0.0f
+        ? static_cast<double>(config.tracking_prediction_boost)
+        : 0.35 + responseControl * 0.45;
+
+    double leadTime = prediction_interval + detectionDelay * boost;
+    leadTime = std::clamp(leadTime, 0.0, 0.14);
+
+    double predictedX = estimate.x + estimate.vx * leadTime;
+    double predictedY = estimate.y + estimate.vy * leadTime;
 
     return { predictedX, predictedY };
 }
@@ -318,12 +434,17 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     SendInput(1, &in, sizeof(INPUT));
 }
 
-std::pair<double, double> MouseThread::calc_movement(double tx, double ty)
+std::pair<double, double> MouseThread::calc_movement(double tx, double ty, double dt)
 {
     double offx = tx - center_x;
     double offy = ty - center_y;
     double dist = std::hypot(offx, offy);
-    double speed = calculate_speed_multiplier(dist);
+
+    double noiseFloor = std::max(0.05, static_cast<double>(config.tracking_noise_floor));
+    if (dist < noiseFloor)
+    {
+        return { 0.0, 0.0 };
+    }
 
     double degPerPxX = fov_x / screen_width;
     double degPerPxY = fov_y / screen_height;
@@ -331,13 +452,38 @@ std::pair<double, double> MouseThread::calc_movement(double tx, double ty)
     double mmx = offx * degPerPxX;
     double mmy = offy * degPerPxY;
 
-    double corr = 1.0;
-    double fps = static_cast<double>(captureFps.load());
-    if (fps > 30.0) corr = 30.0 / fps;
-
     auto counts_pair = config.degToCounts(mmx, mmy, fov_x);
-    double move_x = counts_pair.first * speed * corr;
-    double move_y = counts_pair.second * speed * corr;
+    double errX = counts_pair.first;
+    double errY = counts_pair.second;
+
+    double responseControl = std::clamp(static_cast<double>(config.aim_response_control), 0.0, 1.0);
+    double stickControl = std::clamp(static_cast<double>(config.aim_stickiness_control), 0.0, 1.0);
+
+    double safeDt = std::clamp(dt, 1e-4, 0.25);
+    double responseTime = 0.012 + (0.15 * (1.0 - responseControl));
+    double frameAlpha = 1.0 - std::exp(-safeDt / responseTime);
+    frameAlpha = std::clamp(frameAlpha, 0.05, 1.0);
+
+    double baseSpeed = calculate_speed_multiplier(dist);
+    double stepGain = baseSpeed * frameAlpha;
+
+    double fps = static_cast<double>(captureFps.load());
+    if (fps > 30.0)
+    {
+        stepGain *= 30.0 / fps;
+    }
+
+    double closeRadius = std::max(static_cast<double>(config.snapRadius), noiseFloor * 1.35);
+    if (dist <= closeRadius)
+    {
+        double closeBoost = 0.55 + stickControl * 0.35;
+        stepGain = std::max(stepGain, baseSpeed * closeBoost);
+    }
+
+    stepGain = std::clamp(stepGain, 0.0, 1.6);
+
+    double move_x = errX * stepGain;
+    double move_y = errY * stepGain;
 
     return { move_x, move_y };
 }
@@ -392,19 +538,38 @@ bool MouseThread::check_target_in_scope(double target_x, double target_y, double
 
 void MouseThread::moveMouse(const AimbotTarget& target)
 {
-    std::lock_guard lg(input_method_mutex);
+    int stepX = 0;
+    int stepY = 0;
+    bool useWind = false;
 
-    auto predicted = predict_target_position(
-        target.x + target.w / 2.0,
-        target.y + target.h / 2.0);
+    {
+        std::lock_guard lg(input_method_mutex);
 
-    auto mv = calc_movement(predicted.first, predicted.second);
-    auto steps = resolveMovementSteps(mv.first, mv.second);
-    if (steps.first == 0 && steps.second == 0)
+        auto predicted = predict_target_position(
+            target.x + target.w / 2.0,
+            target.y + target.h / 2.0);
+
+        double dt = last_prediction_dt;
+        auto mv = calc_movement(predicted.first, predicted.second, dt);
+        auto steps = resolveMovementSteps(mv.first, mv.second);
+        stepX = steps.first;
+        stepY = steps.second;
+        useWind = wind_mouse_enabled;
+    }
+
+    if (stepX == 0 && stepY == 0)
     {
         return;
     }
-    queueMove(steps.first, steps.second);
+
+    if (useWind)
+    {
+        windMouseMoveRelative(stepX, stepY);
+    }
+    else
+    {
+        queueMove(stepX, stepY);
+    }
 }
 
 void MouseThread::moveMousePivot(double pivotX, double pivotY)
@@ -414,73 +579,35 @@ void MouseThread::moveMousePivot(double pivotX, double pivotY)
 
 void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMovement)
 {
-    std::lock_guard lg(input_method_mutex);
+    int mx = 0;
+    int my = 0;
+    bool useWind = false;
 
-    auto current_time = std::chrono::steady_clock::now();
-
-    if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
     {
-        prev_time = current_time;
-        prev_x = pivotX;
-        prev_y = pivotY;
-        prev_velocity_x = 0.0;
-        prev_velocity_y = 0.0;
+        std::lock_guard lg(input_method_mutex);
+
+        auto predicted = predict_target_position(pivotX, pivotY);
 
         if (!allowMovement)
         {
             return;
         }
 
-        auto m0 = calc_movement(pivotX, pivotY);
-        auto steps0 = resolveMovementSteps(m0.first, m0.second);
-        int mx0 = steps0.first;
-        int my0 = steps0.second;
-        if (mx0 == 0 && my0 == 0)
+        double dt = last_prediction_dt;
+        auto mv = calc_movement(predicted.first, predicted.second, dt);
+        auto steps = resolveMovementSteps(mv.first, mv.second);
+        mx = steps.first;
+        my = steps.second;
+
+        if (mx == 0 && my == 0)
         {
             return;
         }
 
-        if (wind_mouse_enabled)
-        {
-            windMouseMoveRelative(mx0, my0);
-        }
-        else
-        {
-            queueMove(mx0, my0);
-        }
-        return;
+        useWind = wind_mouse_enabled;
     }
 
-    double dt = std::chrono::duration<double>(current_time - prev_time).count();
-    prev_time = current_time;
-    dt = std::max(dt, 1e-8);
-
-    double vx = std::clamp((pivotX - prev_x) / dt, -20000.0, 20000.0);
-    double vy = std::clamp((pivotY - prev_y) / dt, -20000.0, 20000.0);
-    prev_x = pivotX;
-    prev_y = pivotY;
-    prev_velocity_x = vx;
-    prev_velocity_y = vy;
-
-    if (!allowMovement)
-    {
-        return;
-    }
-
-    double predX = pivotX + vx * prediction_interval + vx * 0.002;
-    double predY = pivotY + vy * prediction_interval + vy * 0.002;
-
-    auto mv = calc_movement(predX, predY);
-    auto steps = resolveMovementSteps(mv.first, mv.second);
-    int mx = steps.first;
-    int my = steps.second;
-
-    if (mx == 0 && my == 0)
-    {
-        return;
-    }
-
-    if (wind_mouse_enabled)
+    if (useWind)
     {
         windMouseMoveRelative(mx, my);
     }
@@ -561,6 +688,7 @@ void MouseThread::releaseMouse()
 
 void MouseThread::resetPrediction()
 {
+    resetTrackingFilter();
     prev_time = std::chrono::steady_clock::time_point();
     prev_x = 0;
     prev_y = 0;

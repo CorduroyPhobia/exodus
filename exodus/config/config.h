@@ -48,6 +48,12 @@ public:
     float speedCurveExponent;
     float snapBoostFactor;
 
+    float aim_response_control;
+    float aim_smooth_control;
+    float aim_stickiness_control;
+    float tracking_noise_floor;
+    float tracking_prediction_boost;
+
     double sens;
     double yaw;
     double pitch;
@@ -66,6 +72,9 @@ public:
     float wind_speed_multiplier;
     float wind_min_velocity;
     float wind_target_radius;
+    float wind_randomness;
+    float wind_inertia;
+    float wind_step_randomness;
 
     // Mouse shooting
     bool auto_shoot;
@@ -135,6 +144,9 @@ public:
     bool loadConfig(const std::string& filename = "config.ini");
     bool saveConfig(const std::string& filename = "config.ini");
     bool savePreset(const std::string& filename, const std::string& presetName) const;
+
+    void applyAimProfile(float response, float smooth, float stick);
+    void deriveAimProfileFromRaw();
 
     std::string joinStrings(const std::vector<std::string>& vec, const std::string& delimiter = ",") const;
 
