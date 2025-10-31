@@ -107,11 +107,15 @@ void draw_target()
     int debugHeightPx = 0;
     int debugWidthPx = 0;
     int debugBottomOffsetPx = 0;
-    getFriendlyMarkerDebugInfo(debugHeightPx, debugWidthPx, debugBottomOffsetPx);
+    int debugStartXPx = 0;
+    int debugTopYPx = 0;
+    bool debugMarkerDetected = false;
+    getFriendlyMarkerDebugInfo(debugHeightPx, debugWidthPx, debugBottomOffsetPx, debugStartXPx, debugTopYPx, debugMarkerDetected);
     if (debugHeightPx > 0 && debugWidthPx > 0)
     {
         const char* debugOffsetLabel = debugBottomOffsetPx >= 0 ? "above" : "inside";
         ImGui::TextDisabled("Last scan window: %d x %d px, bottom offset %d px %s the target", debugWidthPx, debugHeightPx, std::abs(debugBottomOffsetPx), debugOffsetLabel);
+        ImGui::TextDisabled("Last scan origin: (%d, %d) — marker %s detected", debugStartXPx, debugTopYPx, debugMarkerDetected ? "was" : "was not");
     }
 
     if (prev_disable_headshot != config.disable_headshot ||

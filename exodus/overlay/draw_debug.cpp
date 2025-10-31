@@ -10,6 +10,7 @@
 #include "overlay.h"
 #include "include/other_tools.h"
 #include "capture.h"
+#include "../mouse/AimbotTarget.h"
 
 #ifndef SAFE_RELEASE
 #define SAFE_RELEASE(p)       \
@@ -118,6 +119,30 @@ void draw_debug_frame()
                 draw_list->AddText(ImVec2(p1.x, p1.y - 16), IM_COL32(255, 255, 0, 255), label.c_str());
             }
         }
+    }
+
+    int fmHeight = 0;
+    int fmWidth = 0;
+    int fmBottomOffset = 0;
+    int fmStartX = 0;
+    int fmTopY = 0;
+    bool fmDetected = false;
+    getFriendlyMarkerDebugInfo(fmHeight, fmWidth, fmBottomOffset, fmStartX, fmTopY, fmDetected);
+    if (fmHeight > 0 && fmWidth > 0)
+    {
+        ImVec2 roiMin(image_pos.x + fmStartX * debug_scale,
+            image_pos.y + fmTopY * debug_scale);
+        ImVec2 roiMax(roiMin.x + fmWidth * debug_scale,
+            roiMin.y + fmHeight * debug_scale);
+
+        ImU32 fillColor = fmDetected ? IM_COL32(0, 255, 0, 50) : IM_COL32(255, 215, 0, 40);
+        ImU32 outlineColor = fmDetected ? IM_COL32(0, 200, 0, 255) : IM_COL32(255, 180, 0, 255);
+
+        draw_list->AddRectFilled(roiMin, roiMax, fillColor);
+        draw_list->AddRect(roiMin, roiMax, outlineColor, 0.0f, 0, 2.0f);
+
+        const char* status = fmDetected ? "Marker detected" : "Marker not detected";
+        draw_list->AddText(ImVec2(roiMin.x, roiMin.y - 16.0f), outlineColor, status);
     }
 
     if (config.draw_futurePositions && globalMouseThread)
