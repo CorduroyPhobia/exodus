@@ -35,6 +35,7 @@ public:
     bool prevent_targeting_friendly_marker;
     float friendly_marker_scan_height_ratio;
     float friendly_marker_scan_width_ratio;
+    float friendly_marker_scan_vertical_offset_ratio;
     float friendly_marker_color_tolerance;
 
     // Mouse

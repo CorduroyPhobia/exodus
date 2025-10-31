@@ -79,6 +79,7 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "prevent_targeting_friendly_marker = " << (cfg.prevent_targeting_friendly_marker ? "true" : "false") << "\n"
         << "friendly_marker_scan_height_ratio = " << cfg.friendly_marker_scan_height_ratio << "\n"
         << "friendly_marker_scan_width_ratio = " << cfg.friendly_marker_scan_width_ratio << "\n"
+        << "friendly_marker_scan_vertical_offset_ratio = " << cfg.friendly_marker_scan_vertical_offset_ratio << "\n"
         << std::setprecision(1)
         << "friendly_marker_color_tolerance = " << cfg.friendly_marker_color_tolerance << "\n\n"
         << std::setprecision(2);
@@ -233,6 +234,7 @@ bool Config::loadConfig(const std::string& filename)
         prevent_targeting_friendly_marker = true;
         friendly_marker_scan_height_ratio = 0.25f;
         friendly_marker_scan_width_ratio = 0.60f;
+        friendly_marker_scan_vertical_offset_ratio = 0.0f;
         friendly_marker_color_tolerance = 60.0f;
 
         // Mouse
@@ -526,10 +528,12 @@ bool Config::loadConfig(const std::string& filename)
     prevent_targeting_friendly_marker = get_bool("prevent_targeting_friendly_marker", true);
     friendly_marker_scan_height_ratio = (float)get_double("friendly_marker_scan_height_ratio", 0.25);
     friendly_marker_scan_width_ratio = (float)get_double("friendly_marker_scan_width_ratio", 0.60);
+    friendly_marker_scan_vertical_offset_ratio = (float)get_double("friendly_marker_scan_vertical_offset_ratio", 0.0);
     friendly_marker_color_tolerance = (float)get_double("friendly_marker_color_tolerance", 60.0);
 
     friendly_marker_scan_height_ratio = std::clamp(friendly_marker_scan_height_ratio, 0.05f, 0.60f);
     friendly_marker_scan_width_ratio = std::clamp(friendly_marker_scan_width_ratio, 0.20f, 1.0f);
+    friendly_marker_scan_vertical_offset_ratio = std::clamp(friendly_marker_scan_vertical_offset_ratio, -0.50f, 1.50f);
     friendly_marker_color_tolerance = std::clamp(friendly_marker_color_tolerance, 5.0f, 200.0f);
 
     // Mouse

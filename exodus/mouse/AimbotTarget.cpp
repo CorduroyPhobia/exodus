@@ -18,53 +18,98 @@
 
 namespace
 {
+    struct FriendlyMarkerDebugState
+    {
+        std::atomic<int> height{ 0 };
+        std::atomic<int> width{ 0 };
+        std::atomic<int> bottomOffset{ 0 };
+    };
+
+    FriendlyMarkerDebugState gFriendlyMarkerDebugState;
+
+    void recordFriendlyMarkerDebug(int height, int width, int bottomOffset)
+    {
+        gFriendlyMarkerDebugState.height.store(height, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.width.store(width, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.bottomOffset.store(bottomOffset, std::memory_order_relaxed);
+    }
+
     bool hasFriendlyMarkerAbove(const cv::Rect& box)
     {
         if (!config.prevent_targeting_friendly_marker)
+        {
+            recordFriendlyMarkerDebug(0, 0, 0);
             return false;
+        }
 
         cv::Mat region;
+        int sampleHeight = 0;
+        int sampleWidth = 0;
+        int topY = 0;
+        int bottomY = 0;
         {
             std::lock_guard<std::mutex> lock(frameMutex);
 
             if (latestFrame.empty())
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             const cv::Mat& frame = latestFrame;
 
             if (frame.cols <= 0 || frame.rows <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             const float heightRatio = std::clamp(config.friendly_marker_scan_height_ratio, 0.05f, 0.60f);
             const float widthRatio = std::clamp(config.friendly_marker_scan_width_ratio, 0.20f, 1.0f);
+            const float offsetRatio = std::clamp(config.friendly_marker_scan_vertical_offset_ratio, -0.50f, 1.50f);
 
-            int sampleHeight = std::max(2, static_cast<int>(std::round(box.height * heightRatio)));
-            int sampleWidth = std::max(4, static_cast<int>(std::round(box.width * widthRatio)));
+            sampleHeight = std::max(2, static_cast<int>(std::round(box.height * heightRatio)));
+            sampleWidth = std::max(4, static_cast<int>(std::round(box.width * widthRatio)));
 
-            const int maxY = std::max(0, box.y - 1);
-            int minY = maxY - sampleHeight + 1;
-            if (minY < 0)
+            const int frameBottom = frame.rows - 1;
+
+            int desiredBottom = box.y - 1 - static_cast<int>(std::round(box.height * offsetRatio));
+            bottomY = std::clamp(desiredBottom, 0, frameBottom);
+            topY = bottomY - sampleHeight + 1;
+            if (topY < 0)
             {
-                sampleHeight = maxY + 1;
-                minY = 0;
+                sampleHeight = bottomY + 1;
+                topY = 0;
             }
 
             if (sampleHeight <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
-            if (minY >= frame.rows)
+            if (topY >= frame.rows)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             if (sampleHeight > frame.rows)
                 sampleHeight = frame.rows;
-            if (minY + sampleHeight > frame.rows)
-                sampleHeight = frame.rows - minY;
+            if (topY + sampleHeight > frame.rows)
+                sampleHeight = frame.rows - topY;
 
             if (sampleHeight <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             if (frame.cols <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             if (sampleWidth > frame.cols)
                 sampleWidth = frame.cols;
@@ -73,23 +118,39 @@ namespace
             startX = std::clamp(startX, 0, std::max(0, frame.cols - sampleWidth));
 
             if (startX >= frame.cols)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             if (sampleWidth <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
             if (startX + sampleWidth > frame.cols)
                 sampleWidth = frame.cols - startX;
 
             if (sampleWidth <= 0 || sampleHeight <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0);
                 return false;
+            }
 
-            cv::Rect roi(startX, minY, sampleWidth, sampleHeight);
+            cv::Rect roi(startX, topY, sampleWidth, sampleHeight);
             region = frame(roi).clone();
+            bottomY = topY + sampleHeight - 1;
         }
 
         if (region.empty())
+        {
+            recordFriendlyMarkerDebug(0, 0, 0);
             return false;
+        }
+
+        int bottomOffsetPx = box.y - 1 - bottomY;
+        recordFriendlyMarkerDebug(sampleHeight, sampleWidth, bottomOffsetPx);
 
         const std::array<cv::Vec3b, 2> teammateColors = {
             cv::Vec3b(0xD2, 0x9D, 0x0F), // BGR for #0F9DD2 (legacy)
@@ -126,6 +187,13 @@ namespace
 
         return false;
     }
+}
+
+void getFriendlyMarkerDebugInfo(int& sampleHeightPx, int& sampleWidthPx, int& bottomOffsetPx)
+{
+    sampleHeightPx = gFriendlyMarkerDebugState.height.load(std::memory_order_relaxed);
+    sampleWidthPx = gFriendlyMarkerDebugState.width.load(std::memory_order_relaxed);
+    bottomOffsetPx = gFriendlyMarkerDebugState.bottomOffset.load(std::memory_order_relaxed);
 }
 
 AimbotTarget::AimbotTarget(int x_, int y_, int w_, int h_, int cls, double px, double py)
