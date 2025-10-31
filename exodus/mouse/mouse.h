@@ -79,6 +79,7 @@ private:
     std::pair<double, double> calc_movement(double target_x, double target_y);
     std::pair<int, int> resolveMovementSteps(double moveX, double moveY);
     double calculate_speed_multiplier(double distance);
+    bool teammateColorDetectedAboveTarget(const AimbotTarget& target);
 
 public:
     std::mutex input_method_mutex;
