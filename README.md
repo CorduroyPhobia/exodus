@@ -211,3 +211,15 @@ This project is actively developed thanks to the people who support it on [Boost
 ---
 
 **Need help or want to contribute? Join our [Discord server](https://discord.gg/37WVp6sNEh) or open an issue on GitHub!**
+---
+
+# Raspberry Pi Zero 2W + Windows Host Architecture
+
+The repository now ships with a complete Pi/PC orchestration layer that keeps the original `ai.exe` workflow intact while enabling plug-and-play deployment through a Raspberry Pi Zero 2W. Key resources:
+
+- [`docs/SETUP.md`](docs/SETUP.md) – end-to-end flashing and provisioning instructions.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) – component diagram and communication protocol.
+- [`pi_side/`](pi_side) – Python sources, systemd units, and first-boot provisioning scripts for the Pi.
+- [`pc_side/`](pc_side) – Windows service wrapper, installer batch script, and configuration templates.
+
+The Pi stores the entire application payload (models, presets, binaries) and exposes them to the Windows host during the initial handshake. Once the installer runs on Windows, `ai.exe` executes headlessly while the Pi relays mouse vectors via USB HID. Preset selection and status feedback are presented on the Waveshare IPS LCD HAT attached to the Pi.
