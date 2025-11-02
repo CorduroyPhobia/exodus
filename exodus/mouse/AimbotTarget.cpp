@@ -4,6 +4,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <limits>
@@ -17,52 +18,163 @@
 
 namespace
 {
+    struct FriendlyMarkerDebugState
+    {
+        std::atomic<int> height{ 0 };
+        std::atomic<int> width{ 0 };
+        std::atomic<int> bottomOffset{ 0 };
+        std::atomic<int> startX{ 0 };
+        std::atomic<int> topY{ 0 };
+        std::atomic<int> detected{ 0 };
+    };
+
+    FriendlyMarkerDebugState gFriendlyMarkerDebugState;
+
+    void recordFriendlyMarkerDebug(int height, int width, int bottomOffset, int startX, int topY, bool markerDetected)
+    {
+        gFriendlyMarkerDebugState.height.store(height, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.width.store(width, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.bottomOffset.store(bottomOffset, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.startX.store(startX, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.topY.store(topY, std::memory_order_relaxed);
+        gFriendlyMarkerDebugState.detected.store(markerDetected ? 1 : 0, std::memory_order_relaxed);
+    }
+
     bool hasFriendlyMarkerAbove(const cv::Rect& box)
     {
+        if (!config.prevent_targeting_friendly_marker)
+        {
+            recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
+            return false;
+        }
+
         cv::Mat region;
+        int sampleHeight = 0;
+        int sampleWidth = 0;
+        int topY = 0;
+        int bottomY = 0;
+        int startX = 0;
         {
             std::lock_guard<std::mutex> lock(frameMutex);
 
             if (latestFrame.empty())
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
                 return false;
+            }
 
             const cv::Mat& frame = latestFrame;
 
             if (frame.cols <= 0 || frame.rows <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
                 return false;
+            }
 
-            const int sampleHeight = std::max(2, box.height / 6);
-            const int sampleWidth = std::max(4, box.width / 2);
+            const float heightRatio = std::clamp(config.friendly_marker_scan_height_ratio, 0.05f, 0.60f);
+            const float widthRatio = std::clamp(config.friendly_marker_scan_width_ratio, 0.20f, 1.0f);
+            const float offsetRatio = std::clamp(config.friendly_marker_scan_vertical_offset_ratio, -0.50f, 1.50f);
 
-            const int maxY = std::max(0, box.y - 1);
-            const int minY = std::max(0, maxY - sampleHeight + 1);
-            const int height = maxY - minY + 1;
-            if (height <= 0)
+            sampleHeight = std::max(2, static_cast<int>(std::round(box.height * heightRatio)));
+            sampleWidth = std::max(4, static_cast<int>(std::round(box.width * widthRatio)));
+
+            const int frameBottom = frame.rows - 1;
+
+            int desiredBottom = box.y - 1 - static_cast<int>(std::round(box.height * offsetRatio));
+            bottomY = std::clamp(desiredBottom, 0, frameBottom);
+            topY = bottomY - sampleHeight + 1;
+            if (topY < 0)
+            {
+                sampleHeight = bottomY + 1;
+                topY = 0;
+            }
+
+            if (sampleHeight <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
                 return false;
+            }
 
-            int startX = box.x + (box.width - sampleWidth) / 2;
-            startX = std::clamp(startX, 0, frame.cols - sampleWidth);
-            if (startX < 0 || startX >= frame.cols)
+            if (topY >= frame.rows)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
                 return false;
+            }
+
+            if (sampleHeight > frame.rows)
+                sampleHeight = frame.rows;
+            if (topY + sampleHeight > frame.rows)
+                sampleHeight = frame.rows - topY;
+
+            if (sampleHeight <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
+                return false;
+            }
+
+            if (frame.cols <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
+                return false;
+            }
+
+            if (sampleWidth > frame.cols)
+                sampleWidth = frame.cols;
+
+            startX = box.x + (box.width - sampleWidth) / 2;
+            startX = std::clamp(startX, 0, std::max(0, frame.cols - sampleWidth));
+
+            if (startX >= frame.cols)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
+                return false;
+            }
 
             if (sampleWidth <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
                 return false;
+            }
 
-            if (minY >= frame.rows)
+            if (startX + sampleWidth > frame.cols)
+                sampleWidth = frame.cols - startX;
+
+            if (sampleWidth <= 0 || sampleHeight <= 0)
+            {
+                recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
                 return false;
+            }
 
-            int clampedWidth = std::min(sampleWidth, frame.cols - startX);
-            int clampedHeight = std::min(height, frame.rows - minY);
-
-            if (clampedWidth <= 0 || clampedHeight <= 0)
-                return false;
-
-            cv::Rect roi(startX, minY, clampedWidth, clampedHeight);
+            cv::Rect roi(startX, topY, sampleWidth, sampleHeight);
             region = frame(roi).clone();
+            bottomY = topY + sampleHeight - 1;
         }
 
-        const cv::Vec3b teammateColor(0xD2, 0x9D, 0x0F); // BGR for #0F9DD2
-        constexpr int tolerance = 20;
+        if (region.empty())
+        {
+            recordFriendlyMarkerDebug(0, 0, 0, 0, 0, false);
+            return false;
+        }
+
+        int bottomOffsetPx = box.y - 1 - bottomY;
+        recordFriendlyMarkerDebug(sampleHeight, sampleWidth, bottomOffsetPx, startX, topY, false);
+
+        const std::array<cv::Vec3b, 2> teammateColors = {
+            cv::Vec3b(0xD2, 0x9D, 0x0F), // BGR for #0F9DD2 (legacy)
+            cv::Vec3b(0xCF, 0x97, 0x00)  // BGR for #0097CF (new)
+        };
+
+        const float configuredTolerance = std::clamp(config.friendly_marker_color_tolerance, 5.0f, 200.0f);
+        const int tolerance = static_cast<int>(std::round(configuredTolerance));
+        const int toleranceSq = tolerance * tolerance;
+
+        auto colorDistanceSq = [](const cv::Vec3b& lhs, const cv::Vec3b& rhs)
+        {
+            const int db = static_cast<int>(lhs[0]) - static_cast<int>(rhs[0]);
+            const int dg = static_cast<int>(lhs[1]) - static_cast<int>(rhs[1]);
+            const int dr = static_cast<int>(lhs[2]) - static_cast<int>(rhs[2]);
+            return db * db + dg * dg + dr * dr;
+        };
 
         for (int y = 0; y < region.rows; ++y)
         {
@@ -70,17 +182,30 @@ namespace
             for (int x = 0; x < region.cols; ++x)
             {
                 const cv::Vec3b& pixel = row[x];
-                if (std::abs(pixel[0] - teammateColor[0]) <= tolerance &&
-                    std::abs(pixel[1] - teammateColor[1]) <= tolerance &&
-                    std::abs(pixel[2] - teammateColor[2]) <= tolerance)
+                for (const auto& teammateColor : teammateColors)
                 {
-                    return true;
+                    if (colorDistanceSq(pixel, teammateColor) <= toleranceSq)
+                    {
+                        recordFriendlyMarkerDebug(sampleHeight, sampleWidth, bottomOffsetPx, startX, topY, true);
+                        return true;
+                    }
                 }
             }
         }
 
+        recordFriendlyMarkerDebug(sampleHeight, sampleWidth, bottomOffsetPx, startX, topY, false);
         return false;
     }
+}
+
+void getFriendlyMarkerDebugInfo(int& sampleHeightPx, int& sampleWidthPx, int& bottomOffsetPx, int& startXPx, int& topYPx, bool& markerDetected)
+{
+    sampleHeightPx = gFriendlyMarkerDebugState.height.load(std::memory_order_relaxed);
+    sampleWidthPx = gFriendlyMarkerDebugState.width.load(std::memory_order_relaxed);
+    bottomOffsetPx = gFriendlyMarkerDebugState.bottomOffset.load(std::memory_order_relaxed);
+    startXPx = gFriendlyMarkerDebugState.startX.load(std::memory_order_relaxed);
+    topYPx = gFriendlyMarkerDebugState.topY.load(std::memory_order_relaxed);
+    markerDetected = gFriendlyMarkerDebugState.detected.load(std::memory_order_relaxed) != 0;
 }
 
 AimbotTarget::AimbotTarget(int x_, int y_, int w_, int h_, int cls, double px, double py)
