@@ -48,6 +48,14 @@ public:
     float speedCurveExponent;
     float snapBoostFactor;
 
+    // Target switching
+    bool  target_switching_enabled;
+    float target_switch_reaction_ms;
+    float target_switch_slowdown_ms;
+    float target_switch_speed_factor;
+    float target_switch_overshoot_px;
+    float target_switch_detection_px;
+
     double sens;
     double yaw;
     double pitch;

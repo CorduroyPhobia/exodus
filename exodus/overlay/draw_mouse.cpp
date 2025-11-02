@@ -24,6 +24,13 @@ float prev_nearRadius = config.nearRadius;
 float prev_speedCurveExponent = config.speedCurveExponent;
 float prev_snapBoostFactor = config.snapBoostFactor;
 
+bool  prev_target_switching_enabled = config.target_switching_enabled;
+float prev_target_switch_reaction_ms = config.target_switch_reaction_ms;
+float prev_target_switch_slowdown_ms = config.target_switch_slowdown_ms;
+float prev_target_switch_speed_factor = config.target_switch_speed_factor;
+float prev_target_switch_overshoot_px = config.target_switch_overshoot_px;
+float prev_target_switch_detection_px = config.target_switch_detection_px;
+
 bool  prev_wind_mouse_enabled = config.wind_mouse_enabled;
 float prev_wind_G = config.wind_G;
 float prev_wind_W = config.wind_W;
@@ -509,6 +516,58 @@ void draw_mouse()
         }
     }
 
+    ImGui::SeparatorText("Target switching realism");
+    if (ImGui::Checkbox("Enable target switching realism", &config.target_switching_enabled))
+    {
+        config.saveConfig();
+    }
+    ImGui::TextDisabled("Simulates human-like hesitation and overshoot when swapping targets.");
+
+    ImGui::BeginDisabled(!config.target_switching_enabled);
+    if (ImGui::SliderFloat("Reaction delay (ms)", &config.target_switch_reaction_ms, 0.0f, 200.0f, "%.0f"))
+    {
+        if (config.target_switch_reaction_ms < 0.0f)
+            config.target_switch_reaction_ms = 0.0f;
+        config.saveConfig();
+    }
+    if (ImGui::SliderFloat("Ramp duration (ms)", &config.target_switch_slowdown_ms, 0.0f, 400.0f, "%.0f"))
+    {
+        if (config.target_switch_slowdown_ms < 0.0f)
+            config.target_switch_slowdown_ms = 0.0f;
+        config.saveConfig();
+    }
+    if (ImGui::SliderFloat("Initial speed factor", &config.target_switch_speed_factor, 0.0f, 1.0f, "%.2f"))
+    {
+        config.target_switch_speed_factor = ImClamp(config.target_switch_speed_factor, 0.0f, 1.0f);
+        config.saveConfig();
+    }
+    if (ImGui::SliderFloat("Overshoot distance (px)", &config.target_switch_overshoot_px, 0.0f, 30.0f, "%.1f"))
+    {
+        if (config.target_switch_overshoot_px < 0.0f)
+            config.target_switch_overshoot_px = 0.0f;
+        config.saveConfig();
+    }
+    if (ImGui::SliderFloat("Switch detection distance (px)", &config.target_switch_detection_px, 5.0f, 200.0f, "%.0f"))
+    {
+        if (config.target_switch_detection_px < 1.0f)
+            config.target_switch_detection_px = 1.0f;
+        config.saveConfig();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::TextDisabled("Raise detection distance to ignore minor aim jitter.");
+
+    if (ImGui::Button("Reset Target Switching to defaults"))
+    {
+        config.target_switching_enabled = false;
+        config.target_switch_reaction_ms = 55.0f;
+        config.target_switch_slowdown_ms = 160.0f;
+        config.target_switch_speed_factor = 0.40f;
+        config.target_switch_overshoot_px = 12.0f;
+        config.target_switch_detection_px = 75.0f;
+        config.saveConfig();
+    }
+
     ImGui::SeparatorText("Wind mouse");
 
     if (ImGui::Checkbox("Enable WindMouse", &config.wind_mouse_enabled))
@@ -621,6 +680,37 @@ void draw_mouse()
         prev_nearRadius = config.nearRadius;
         prev_speedCurveExponent = config.speedCurveExponent;
         prev_snapBoostFactor = config.snapBoostFactor;
+
+        globalMouseThread->updateConfig(
+            config.detection_resolution,
+            config.fovX,
+            config.fovY,
+            config.minSpeedMultiplier,
+            config.maxSpeedMultiplier,
+            config.predictionInterval,
+            config.auto_shoot,
+            config.auto_shoot_hold_until_off_target,
+            config.bScope_multiplier,
+            config.auto_shoot_fire_delay_ms,
+            config.auto_shoot_press_duration_ms,
+            config.auto_shoot_full_auto_grace_ms);
+
+        config.saveConfig();
+    }
+
+    if (prev_target_switching_enabled != config.target_switching_enabled ||
+        prev_target_switch_reaction_ms != config.target_switch_reaction_ms ||
+        prev_target_switch_slowdown_ms != config.target_switch_slowdown_ms ||
+        prev_target_switch_speed_factor != config.target_switch_speed_factor ||
+        prev_target_switch_overshoot_px != config.target_switch_overshoot_px ||
+        prev_target_switch_detection_px != config.target_switch_detection_px)
+    {
+        prev_target_switching_enabled = config.target_switching_enabled;
+        prev_target_switch_reaction_ms = config.target_switch_reaction_ms;
+        prev_target_switch_slowdown_ms = config.target_switch_slowdown_ms;
+        prev_target_switch_speed_factor = config.target_switch_speed_factor;
+        prev_target_switch_overshoot_px = config.target_switch_overshoot_px;
+        prev_target_switch_detection_px = config.target_switch_detection_px;
 
         globalMouseThread->updateConfig(
             config.detection_resolution,
