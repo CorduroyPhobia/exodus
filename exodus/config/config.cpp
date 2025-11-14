@@ -106,6 +106,17 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << std::fixed << std::setprecision(1)
         << "easynorecoilstrength = " << cfg.easynorecoilstrength << "\n\n";
 
+    file << "# Target switching\n"
+        << "target_switching_enabled = " << (cfg.target_switching_enabled ? "true" : "false") << "\n"
+        << std::fixed << std::setprecision(1)
+        << "target_switch_reaction_ms = " << cfg.target_switch_reaction_ms << "\n"
+        << "target_switch_slowdown_ms = " << cfg.target_switch_slowdown_ms << "\n"
+        << std::setprecision(2)
+        << "target_switch_speed_factor = " << cfg.target_switch_speed_factor << "\n"
+        << std::setprecision(1)
+        << "target_switch_overshoot_px = " << cfg.target_switch_overshoot_px << "\n"
+        << "target_switch_detection_px = " << cfg.target_switch_detection_px << "\n\n";
+
     // Wind mouse
     file << "# Wind mouse\n"
         << "wind_mouse_enabled = " << (cfg.wind_mouse_enabled ? "true" : "false") << "\n"
@@ -239,6 +250,13 @@ bool Config::loadConfig(const std::string& filename)
         nearRadius = 13.89f;
         speedCurveExponent = 1.81f;
         snapBoostFactor = 1.14f;
+
+        target_switching_enabled = false;
+        target_switch_reaction_ms = 55.0f;
+        target_switch_slowdown_ms = 160.0f;
+        target_switch_speed_factor = 0.40f;
+        target_switch_overshoot_px = 12.0f;
+        target_switch_detection_px = 75.0f;
 
         sens = 0.54;
         yaw = 0.02;
@@ -528,6 +546,23 @@ bool Config::loadConfig(const std::string& filename)
     nearRadius = (float)get_double("nearRadius", 13.89);
     speedCurveExponent = (float)get_double("speedCurveExponent", 1.81);
     snapBoostFactor = (float)get_double("snapBoostFactor", 1.14);
+
+    target_switching_enabled = get_bool("target_switching_enabled", false);
+    target_switch_reaction_ms = (float)get_double("target_switch_reaction_ms", 55.0);
+    target_switch_slowdown_ms = (float)get_double("target_switch_slowdown_ms", 160.0);
+    target_switch_speed_factor = (float)get_double("target_switch_speed_factor", 0.40);
+    target_switch_overshoot_px = (float)get_double("target_switch_overshoot_px", 12.0);
+    target_switch_detection_px = (float)get_double("target_switch_detection_px", 75.0);
+
+    if (target_switch_reaction_ms < 0.0f)
+        target_switch_reaction_ms = 0.0f;
+    if (target_switch_slowdown_ms < 0.0f)
+        target_switch_slowdown_ms = 0.0f;
+    target_switch_speed_factor = std::clamp(target_switch_speed_factor, 0.0f, 1.0f);
+    if (target_switch_overshoot_px < 0.0f)
+        target_switch_overshoot_px = 0.0f;
+    if (target_switch_detection_px < 1.0f)
+        target_switch_detection_px = 1.0f;
 
     easynorecoil = get_bool("easynorecoil", false);
     easynorecoilstrength = (float)get_double("easynorecoilstrength", 0.0);

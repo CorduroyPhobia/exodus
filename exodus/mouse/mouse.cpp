@@ -69,6 +69,13 @@ MouseThread::MouseThread(
     wind_step_randomness = config.wind_step_randomness;
     wind_max_step_config = config.wind_M;
 
+    target_switching_enabled = config.target_switching_enabled;
+    target_switch_reaction_ms = config.target_switch_reaction_ms;
+    target_switch_slowdown_ms = config.target_switch_slowdown_ms;
+    target_switch_speed_factor = std::clamp(static_cast<double>(config.target_switch_speed_factor), 0.0, 1.0);
+    target_switch_overshoot_px = std::max(0.0, static_cast<double>(config.target_switch_overshoot_px));
+    target_switch_detection_px = std::max(1.0, static_cast<double>(config.target_switch_detection_px));
+
     moveWorker = std::thread(&MouseThread::moveWorkerLoop, this);
 }
 
@@ -112,6 +119,22 @@ void MouseThread::updateConfig(
     wind_inertia = config.wind_inertia;
     wind_step_randomness = config.wind_step_randomness;
     wind_max_step_config = config.wind_M;
+
+    target_switching_enabled = config.target_switching_enabled;
+    target_switch_reaction_ms = config.target_switch_reaction_ms;
+    target_switch_slowdown_ms = config.target_switch_slowdown_ms;
+    target_switch_speed_factor = std::clamp(static_cast<double>(config.target_switch_speed_factor), 0.0, 1.0);
+    target_switch_overshoot_px = std::max(0.0, static_cast<double>(config.target_switch_overshoot_px));
+    target_switch_detection_px = std::max(1.0, static_cast<double>(config.target_switch_detection_px));
+
+    if (!target_switching_enabled)
+    {
+        target_switch_active = false;
+        target_switch_delaying = false;
+        pending_target_switch = false;
+        switch_overshoot_dir_x = 0.0;
+        switch_overshoot_dir_y = 0.0;
+    }
 
     residual_move_x = 0.0;
     residual_move_y = 0.0;
@@ -379,6 +402,28 @@ double MouseThread::calculate_speed_multiplier(double distance)
         (max_speed_multiplier - min_speed_multiplier) * norm;
 }
 
+void MouseThread::beginTargetSwitch(double previousPivotX, double previousPivotY, double newPivotX, double newPivotY)
+{
+    if (!target_switching_enabled)
+        return;
+
+    target_switch_active = true;
+    target_switch_delaying = target_switch_reaction_ms > 0.0;
+    target_switch_start_time = std::chrono::steady_clock::now();
+    target_switch_move_time = target_switch_start_time;
+    switch_overshoot_dir_x = 0.0;
+    switch_overshoot_dir_y = 0.0;
+
+    double dirX = newPivotX - previousPivotX;
+    double dirY = newPivotY - previousPivotY;
+    double length = std::hypot(dirX, dirY);
+    if (length > 1e-5)
+    {
+        switch_overshoot_dir_x = dirX / length;
+        switch_overshoot_dir_y = dirY / length;
+    }
+}
+
 std::pair<int, int> MouseThread::resolveMovementSteps(double moveX, double moveY)
 {
     double totalX = moveX + residual_move_x;
@@ -437,49 +482,77 @@ void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMo
 
     auto current_time = std::chrono::steady_clock::now();
 
-    if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
+    if (target_switching_enabled)
+    {
+        double previousTrackedX = current_target_x;
+        double previousTrackedY = current_target_y;
+        bool hadPrevious = current_target_valid;
+
+        bool triggered = false;
+        if (pending_target_switch)
+        {
+            triggered = true;
+        }
+        else if (hadPrevious)
+        {
+            double dist = std::hypot(pivotX - previousTrackedX, pivotY - previousTrackedY);
+            if (dist >= target_switch_detection_px)
+            {
+                triggered = true;
+            }
+        }
+
+        if (triggered)
+        {
+            beginTargetSwitch(hadPrevious ? previousTrackedX : pivotX,
+                hadPrevious ? previousTrackedY : pivotY,
+                pivotX,
+                pivotY);
+            pending_target_switch = false;
+        }
+    }
+    else
+    {
+        pending_target_switch = false;
+        if (target_switch_active)
+        {
+            target_switch_active = false;
+            target_switch_delaying = false;
+            switch_overshoot_dir_x = 0.0;
+            switch_overshoot_dir_y = 0.0;
+        }
+    }
+
+    current_target_x = pivotX;
+    current_target_y = pivotY;
+    current_target_valid = true;
+
+    bool initialFrame = (prev_time.time_since_epoch().count() == 0 || !target_detected.load());
+
+    double vx = 0.0;
+    double vy = 0.0;
+
+    if (initialFrame)
     {
         prev_time = current_time;
         prev_x = pivotX;
         prev_y = pivotY;
         prev_velocity_x = 0.0;
         prev_velocity_y = 0.0;
-
-        if (!allowMovement)
-        {
-            return;
-        }
-
-        auto m0 = calc_movement(pivotX, pivotY);
-        auto steps0 = resolveMovementSteps(m0.first, m0.second);
-        int mx0 = steps0.first;
-        int my0 = steps0.second;
-        if (mx0 == 0 && my0 == 0)
-        {
-            return;
-        }
-
-        if (wind_mouse_enabled)
-        {
-            windMouseMoveRelative(mx0, my0);
-        }
-        else
-        {
-            queueMove(mx0, my0);
-        }
-        return;
     }
+    else
+    {
+        double dt = std::chrono::duration<double>(current_time - prev_time).count();
+        prev_time = current_time;
+        dt = std::max(dt, 1e-8);
 
-    double dt = std::chrono::duration<double>(current_time - prev_time).count();
-    prev_time = current_time;
-    dt = std::max(dt, 1e-8);
-
-    double vx = std::clamp((pivotX - prev_x) / dt, -20000.0, 20000.0);
-    double vy = std::clamp((pivotY - prev_y) / dt, -20000.0, 20000.0);
-    prev_x = pivotX;
-    prev_y = pivotY;
-    prev_velocity_x = vx;
-    prev_velocity_y = vy;
+        vx = std::clamp((pivotX - prev_x) / dt, -20000.0, 20000.0);
+        vy = std::clamp((pivotY - prev_y) / dt, -20000.0, 20000.0);
+        prev_x = pivotX;
+        prev_y = pivotY;
+        prev_velocity_x = vx;
+        prev_velocity_y = vy;
+    }
 
     if (!allowMovement)
     {
@@ -489,7 +562,76 @@ void MouseThread::updatePivotTracking(double pivotX, double pivotY, bool allowMo
     double predX = pivotX + vx * prediction_interval + vx * 0.002;
     double predY = pivotY + vy * prediction_interval + vy * 0.002;
 
+    double speedFactor = 1.0;
+    auto applySwitch = [&](double& targetX, double& targetY) -> bool
+    {
+        if (!target_switch_active || !target_switching_enabled)
+        {
+            speedFactor = 1.0;
+            return true;
+        }
+
+        double elapsedReaction = std::chrono::duration<double, std::milli>(current_time - target_switch_start_time).count();
+        if (target_switch_delaying)
+        {
+            if (elapsedReaction < target_switch_reaction_ms)
+            {
+                return false;
+            }
+            target_switch_delaying = false;
+            target_switch_move_time = current_time;
+        }
+
+        double elapsedMoveMs = std::chrono::duration<double, std::milli>(current_time - target_switch_move_time).count();
+        if (elapsedMoveMs < 0.0)
+            elapsedMoveMs = 0.0;
+
+        double rampMs = target_switch_slowdown_ms;
+        double baseFactor = std::clamp(target_switch_speed_factor, 0.0, 1.0);
+
+        if (rampMs > 1e-3)
+        {
+            double t = std::clamp(elapsedMoveMs / rampMs, 0.0, 1.0);
+            speedFactor = baseFactor + (1.0 - baseFactor) * t;
+            speedFactor = std::clamp(speedFactor, 0.0, 1.0);
+
+            double overshoot = target_switch_overshoot_px;
+            if (overshoot > 0.0 && (switch_overshoot_dir_x != 0.0 || switch_overshoot_dir_y != 0.0))
+            {
+                double decay = 1.0 - t;
+                targetX += switch_overshoot_dir_x * overshoot * decay;
+                targetY += switch_overshoot_dir_y * overshoot * decay;
+                if (t >= 1.0)
+                {
+                    switch_overshoot_dir_x = 0.0;
+                    switch_overshoot_dir_y = 0.0;
+                }
+            }
+
+            if (t >= 1.0 && switch_overshoot_dir_x == 0.0 && switch_overshoot_dir_y == 0.0)
+            {
+                target_switch_active = false;
+            }
+        }
+        else
+        {
+            speedFactor = std::clamp(baseFactor, 0.0, 1.0);
+            switch_overshoot_dir_x = 0.0;
+            switch_overshoot_dir_y = 0.0;
+            target_switch_active = false;
+        }
+
+        return true;
+    };
+
+    if (!applySwitch(predX, predY))
+    {
+        return;
+    }
+
     auto mv = calc_movement(predX, predY);
+    mv.first *= speedFactor;
+    mv.second *= speedFactor;
     auto steps = resolveMovementSteps(mv.first, mv.second);
     int mx = steps.first;
     int my = steps.second;
@@ -588,6 +730,16 @@ void MouseThread::resetPrediction()
     target_detected.store(false);
     residual_move_x = 0.0;
     residual_move_y = 0.0;
+    pending_target_switch = false;
+    current_target_valid = false;
+    current_target_x = 0.0;
+    current_target_y = 0.0;
+    target_switch_active = false;
+    target_switch_delaying = false;
+    switch_overshoot_dir_x = 0.0;
+    switch_overshoot_dir_y = 0.0;
+    target_switch_start_time = std::chrono::steady_clock::time_point();
+    target_switch_move_time = std::chrono::steady_clock::time_point();
 }
 
 void MouseThread::checkAndResetPredictions()
@@ -649,5 +801,28 @@ std::vector<std::pair<double, double>> MouseThread::getFuturePositions()
 {
     std::lock_guard<std::mutex> lock(futurePositionsMutex);
     return futurePositions;
+}
+
+void MouseThread::setTargetDetected(bool detected)
+{
+    bool previous = target_detected.exchange(detected);
+    if (detected)
+    {
+        if (!previous)
+        {
+            pending_target_switch = true;
+        }
+    }
+    else
+    {
+        pending_target_switch = false;
+        current_target_valid = false;
+        target_switch_active = false;
+        target_switch_delaying = false;
+        switch_overshoot_dir_x = 0.0;
+        switch_overshoot_dir_y = 0.0;
+        target_switch_start_time = std::chrono::steady_clock::time_point();
+        target_switch_move_time = std::chrono::steady_clock::time_point();
+    }
 }
 

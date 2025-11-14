@@ -63,6 +63,25 @@ private:
     double residual_move_x = 0.0;
     double residual_move_y = 0.0;
 
+    bool   target_switching_enabled = false;
+    double target_switch_reaction_ms = 0.0;
+    double target_switch_slowdown_ms = 0.0;
+    double target_switch_speed_factor = 1.0;
+    double target_switch_overshoot_px = 0.0;
+    double target_switch_detection_px = 1.0;
+
+    bool   pending_target_switch = false;
+    bool   current_target_valid = false;
+    double current_target_x = 0.0;
+    double current_target_y = 0.0;
+
+    bool   target_switch_active = false;
+    bool   target_switch_delaying = false;
+    std::chrono::steady_clock::time_point target_switch_start_time{};
+    std::chrono::steady_clock::time_point target_switch_move_time{};
+    double switch_overshoot_dir_x = 0.0;
+    double switch_overshoot_dir_y = 0.0;
+
     void moveWorkerLoop();
     void queueMove(int dx, int dy);
 
@@ -79,6 +98,7 @@ private:
     std::pair<double, double> calc_movement(double target_x, double target_y);
     std::pair<int, int> resolveMovementSteps(double moveX, double moveY);
     double calculate_speed_multiplier(double distance);
+    void beginTargetSwitch(double previousPivotX, double previousPivotY, double newPivotX, double newPivotY);
 
 public:
     std::mutex input_method_mutex;
@@ -130,7 +150,7 @@ public:
     void clearFuturePositions();
     std::vector<std::pair<double, double>> getFuturePositions();
 
-    void setTargetDetected(bool detected) { target_detected.store(detected); }
+    void setTargetDetected(bool detected);
     void setLastTargetTime(const std::chrono::steady_clock::time_point& t) { last_target_time = t; }
 };
 
