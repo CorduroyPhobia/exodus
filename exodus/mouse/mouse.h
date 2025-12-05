@@ -14,8 +14,13 @@
 #include <queue>
 #include <thread>
 #include <condition_variable>
+#include <string>
 
 #include "AimbotTarget.h"
+#ifndef MOUSEEVENTF_MOVE_NOCOALESCE
+#define MOUSEEVENTF_MOVE_NOCOALESCE 0x2000
+#endif
+
 class MouseThread
 {
 private:
@@ -57,6 +62,15 @@ private:
     std::thread                   moveWorker;
     std::atomic<bool>             workerStop{ false };
 
+    enum class MovementBackend
+    {
+        SendInput,
+        SendInputNoCoalesce,
+        MouseEvent
+    };
+
+    MovementBackend movement_backend = MovementBackend::SendInput;
+
     std::vector<std::pair<double, double>> futurePositions;
     std::mutex                    futurePositionsMutex;
 
@@ -84,6 +98,7 @@ private:
 
     void moveWorkerLoop();
     void queueMove(int dx, int dy);
+    bool sendInputMovement(int dx, int dy, bool noCoalesce);
 
     bool   wind_mouse_enabled = true;
     double wind_G, wind_W, wind_M, wind_D;
@@ -99,6 +114,7 @@ private:
     std::pair<int, int> resolveMovementSteps(double moveX, double moveY);
     double calculate_speed_multiplier(double distance);
     void beginTargetSwitch(double previousPivotX, double previousPivotY, double newPivotX, double newPivotY);
+    void setMovementMethod(const std::string& methodName);
 
 public:
     std::mutex input_method_mutex;
@@ -115,7 +131,8 @@ public:
         float bScope_multiplier,
         double auto_shoot_fire_delay_ms,
         double auto_shoot_press_duration_ms,
-        double auto_shoot_full_auto_grace_ms
+        double auto_shoot_full_auto_grace_ms,
+        const std::string& mouse_move_method
     );
     ~MouseThread();
 
@@ -131,7 +148,8 @@ public:
         float bScope_multiplier,
         double auto_shoot_fire_delay_ms,
         double auto_shoot_press_duration_ms,
-        double auto_shoot_full_auto_grace_ms
+        double auto_shoot_full_auto_grace_ms,
+        const std::string& mouse_move_method
     );
 
     void moveMousePivot(double pivotX, double pivotY);
