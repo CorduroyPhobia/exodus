@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <string>
 #include <vector>
 
 int prev_fovX = config.fovX;
@@ -23,6 +24,7 @@ float prev_snapRadius = config.snapRadius;
 float prev_nearRadius = config.nearRadius;
 float prev_speedCurveExponent = config.speedCurveExponent;
 float prev_snapBoostFactor = config.snapBoostFactor;
+std::string prev_mouse_move_method = config.mouse_move_method;
 
 bool  prev_target_switching_enabled = config.target_switching_enabled;
 float prev_target_switch_reaction_ms = config.target_switch_reaction_ms;
@@ -425,6 +427,40 @@ void draw_mouse()
     ImGui::SliderFloat("Snap Boost Factor", &config.snapBoostFactor, 0.01f, 4.00f, "%.2f");
     draw_target_correction_demo();
 
+    ImGui::SeparatorText("Movement backend");
+    static const char* movementLabels[] = {
+        "SendInput (balanced)",
+        "SendInput - No coalesce (raw)",
+        "mouse_event (fullscreen friendly)",
+        "Cursor warp (forces movement)",
+        "PostMessage (fullscreen stubborn)"
+    };
+    static const char* movementValues[] = {
+        "send_input",
+        "send_input_no_coalesce",
+        "mouse_event",
+        "cursor_warp",
+        "window_message"
+    };
+
+    int currentBackend = 0;
+    for (int i = 0; i < 5; ++i)
+    {
+        if (config.mouse_move_method == movementValues[i])
+        {
+            currentBackend = i;
+            break;
+        }
+    }
+
+    if (ImGui::Combo("Mouse movement method", &currentBackend, movementLabels, IM_ARRAYSIZE(movementLabels)))
+    {
+        config.mouse_move_method = movementValues[currentBackend];
+        config.saveConfig();
+    }
+
+    ImGui::TextDisabled("'mouse_event' often works best in exclusive fullscreen.\n'No coalesce' mimics raw, unsmoothed device steps.\n'Cursor warp' bypasses injected events by repositioning the cursor directly.\n'PostMessage' posts WM_MOUSEMOVE to the foreground window for apps that ignore injected input.");
+
     ImGui::SeparatorText("Mouse Sensitivity");
 
     float sens_f = static_cast<float>(config.sens);
@@ -655,9 +691,6 @@ void draw_mouse()
 
     draw_wind_mouse_demo();
 
-    ImGui::SeparatorText("Input method");
-    ImGui::TextDisabled("WIN32 is the only supported mouse input method.");
-
     ImGui::Separator();
     ImGui::TextColored(ImVec4(255, 255, 255, 100), "Do not test shooting and aiming with the overlay is open.");
 
@@ -669,7 +702,8 @@ void draw_mouse()
         prev_snapRadius != config.snapRadius ||
         prev_nearRadius != config.nearRadius ||
         prev_speedCurveExponent != config.speedCurveExponent ||
-        prev_snapBoostFactor != config.snapBoostFactor)
+        prev_snapBoostFactor != config.snapBoostFactor ||
+        prev_mouse_move_method != config.mouse_move_method)
     {
         prev_fovX = config.fovX;
         prev_fovY = config.fovY;
@@ -680,6 +714,7 @@ void draw_mouse()
         prev_nearRadius = config.nearRadius;
         prev_speedCurveExponent = config.speedCurveExponent;
         prev_snapBoostFactor = config.snapBoostFactor;
+        prev_mouse_move_method = config.mouse_move_method;
 
         globalMouseThread->updateConfig(
             config.detection_resolution,
@@ -693,7 +728,8 @@ void draw_mouse()
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms);
+            config.auto_shoot_full_auto_grace_ms,
+            config.mouse_move_method);
 
         config.saveConfig();
     }
@@ -724,7 +760,8 @@ void draw_mouse()
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms);
+            config.auto_shoot_full_auto_grace_ms,
+            config.mouse_move_method);
 
         config.saveConfig();
     }
@@ -765,7 +802,8 @@ void draw_mouse()
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms);
+            config.auto_shoot_full_auto_grace_ms,
+            config.mouse_move_method);
 
         config.saveConfig();
     }
@@ -798,7 +836,8 @@ void draw_mouse()
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms);
+            config.auto_shoot_full_auto_grace_ms,
+            config.mouse_move_method);
 
         config.saveConfig();
     }

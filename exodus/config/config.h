@@ -48,6 +48,8 @@ public:
     float speedCurveExponent;
     float snapBoostFactor;
 
+    std::string mouse_move_method;
+
     // Target switching
     bool  target_switching_enabled;
     float target_switch_reaction_ms;

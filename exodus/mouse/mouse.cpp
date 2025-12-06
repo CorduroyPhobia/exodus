@@ -9,6 +9,9 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <cctype>
+#include <string>
+#include <climits>
 
 #include "mouse.h"
 #include "capture.h"
@@ -26,7 +29,8 @@ MouseThread::MouseThread(
     float bScope_multiplier,
     double auto_shoot_fire_delay_ms,
     double auto_shoot_press_duration_ms,
-    double auto_shoot_full_auto_grace_ms)
+    double auto_shoot_full_auto_grace_ms,
+    const std::string& mouse_move_method)
     : screen_width(resolution),
     screen_height(resolution),
     prediction_interval(predictionInterval),
@@ -76,6 +80,8 @@ MouseThread::MouseThread(
     target_switch_overshoot_px = std::max(0.0, static_cast<double>(config.target_switch_overshoot_px));
     target_switch_detection_px = std::max(1.0, static_cast<double>(config.target_switch_detection_px));
 
+    setMovementMethod(mouse_move_method);
+
     moveWorker = std::thread(&MouseThread::moveWorkerLoop, this);
 }
 
@@ -91,7 +97,8 @@ void MouseThread::updateConfig(
     float bScope_multiplier,
     double auto_shoot_fire_delay_ms,
     double auto_shoot_press_duration_ms,
-    double auto_shoot_full_auto_grace_ms
+    double auto_shoot_full_auto_grace_ms,
+    const std::string& mouse_move_method
 )
 {
     screen_width = screen_height = resolution;
@@ -127,6 +134,8 @@ void MouseThread::updateConfig(
     target_switch_overshoot_px = std::max(0.0, static_cast<double>(config.target_switch_overshoot_px));
     target_switch_detection_px = std::max(1.0, static_cast<double>(config.target_switch_detection_px));
 
+    setMovementMethod(mouse_move_method);
+
     if (!target_switching_enabled)
     {
         target_switch_active = false;
@@ -158,6 +167,94 @@ void MouseThread::queueMove(int dx, int dy)
     if (moveQueue.size() >= queueLimit) moveQueue.pop();
     moveQueue.push({ dx,dy });
     queueCv.notify_one();
+}
+
+void MouseThread::setMovementMethod(const std::string& methodName)
+{
+    std::lock_guard<std::mutex> guard(input_method_mutex);
+    std::string lower = methodName;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+        });
+
+    if (lower == "sendinput_no_coalesce" || lower == "send_input_no_coalesce")
+    {
+        movement_backend = MovementBackend::SendInputNoCoalesce;
+    }
+    else if (lower == "mouse_event" || lower == "mouseevent")
+    {
+        movement_backend = MovementBackend::MouseEvent;
+    }
+    else if (lower == "cursor_warp" || lower == "setcursorpos" || lower == "cursorwarp")
+    {
+        movement_backend = MovementBackend::CursorWarp;
+    }
+    else if (lower == "window_message" || lower == "post_message" || lower == "postmessage")
+    {
+        movement_backend = MovementBackend::WindowMessage;
+    }
+    else
+    {
+        movement_backend = MovementBackend::SendInput;
+    }
+}
+
+bool MouseThread::sendInputMovement(int dx, int dy, bool noCoalesce)
+{
+    INPUT in{ 0 };
+    in.type = INPUT_MOUSE;
+    in.mi.dx = dx;
+    in.mi.dy = dy;
+    in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
+    if (noCoalesce)
+    {
+        in.mi.dwFlags |= MOUSEEVENTF_MOVE_NOCOALESCE;
+    }
+
+    return SendInput(1, &in, sizeof(INPUT)) == 1;
+}
+
+bool MouseThread::warpCursor(int dx, int dy)
+{
+    POINT current{};
+    if (!GetCursorPos(&current))
+    {
+        return false;
+    }
+
+    int targetX = current.x + dx;
+    int targetY = current.y + dy;
+    return SetCursorPos(targetX, targetY) != FALSE;
+}
+
+bool MouseThread::postMessageMovement(int dx, int dy)
+{
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd)
+    {
+        return false;
+    }
+
+    POINT screenPt{ dx, dy };
+    if (!GetCursorPos(&screenPt))
+    {
+        return false;
+    }
+
+    screenPt.x += dx;
+    screenPt.y += dy;
+
+    POINT clientPt = screenPt;
+    if (!ScreenToClient(hwnd, &clientPt))
+    {
+        return false;
+    }
+
+    short cx = static_cast<short>(std::clamp(clientPt.x, static_cast<LONG>(SHRT_MIN), static_cast<LONG>(SHRT_MAX)));
+    short cy = static_cast<short>(std::clamp(clientPt.y, static_cast<LONG>(SHRT_MIN), static_cast<LONG>(SHRT_MAX)));
+    LPARAM lparam = MAKELPARAM(cx, cy);
+
+    return PostMessage(hwnd, WM_MOUSEMOVE, 0, lparam) != FALSE;
 }
 
 void MouseThread::moveWorkerLoop()
@@ -352,12 +449,46 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     }
 
     std::lock_guard<std::mutex> lock(input_method_mutex);
+    bool success = false;
+    bool attemptedWarp = false;
 
-    INPUT in{ 0 };
-    in.type = INPUT_MOUSE;
-    in.mi.dx = dx;  in.mi.dy = dy;
-    in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
-    SendInput(1, &in, sizeof(INPUT));
+    switch (movement_backend)
+    {
+    case MovementBackend::SendInput:
+        success = sendInputMovement(dx, dy, false);
+        break;
+    case MovementBackend::SendInputNoCoalesce:
+        success = sendInputMovement(dx, dy, true);
+        break;
+    case MovementBackend::MouseEvent:
+        mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
+        success = true;
+        break;
+    case MovementBackend::CursorWarp:
+        success = warpCursor(dx, dy);
+        attemptedWarp = true;
+        break;
+    case MovementBackend::WindowMessage:
+        success = postMessageMovement(dx, dy);
+        break;
+    default:
+        success = sendInputMovement(dx, dy, false);
+        break;
+    }
+
+    if (!success)
+    {
+        // Some windows block injected mouse input; forcibly moving the cursor often still lands.
+        if (!attemptedWarp)
+        {
+            success = warpCursor(dx, dy);
+        }
+
+        if (!success && movement_backend != MovementBackend::MouseEvent)
+        {
+            mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
+        }
+    }
 }
 
 std::pair<double, double> MouseThread::calc_movement(double tx, double ty)
