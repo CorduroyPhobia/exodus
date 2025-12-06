@@ -431,16 +431,18 @@ void draw_mouse()
     static const char* movementLabels[] = {
         "SendInput (balanced)",
         "SendInput - No coalesce (raw)",
-        "mouse_event (fullscreen friendly)"
+        "mouse_event (fullscreen friendly)",
+        "Cursor warp (forces movement)"
     };
     static const char* movementValues[] = {
         "send_input",
         "send_input_no_coalesce",
-        "mouse_event"
+        "mouse_event",
+        "cursor_warp"
     };
 
     int currentBackend = 0;
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         if (config.mouse_move_method == movementValues[i])
         {
@@ -455,7 +457,7 @@ void draw_mouse()
         config.saveConfig();
     }
 
-    ImGui::TextDisabled("'mouse_event' often works best in exclusive fullscreen.\n'No coalesce' mimics raw, unsmoothed device steps.");
+    ImGui::TextDisabled("'mouse_event' often works best in exclusive fullscreen.\n'No coalesce' mimics raw, unsmoothed device steps.\n'Cursor warp' bypasses injected events by repositioning the cursor directly.");
 
     ImGui::SeparatorText("Mouse Sensitivity");
 

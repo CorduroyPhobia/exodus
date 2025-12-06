@@ -184,6 +184,10 @@ void MouseThread::setMovementMethod(const std::string& methodName)
     {
         movement_backend = MovementBackend::MouseEvent;
     }
+    else if (lower == "cursor_warp" || lower == "setcursorpos" || lower == "cursorwarp")
+    {
+        movement_backend = MovementBackend::CursorWarp;
+    }
     else
     {
         movement_backend = MovementBackend::SendInput;
@@ -203,6 +207,19 @@ bool MouseThread::sendInputMovement(int dx, int dy, bool noCoalesce)
     }
 
     return SendInput(1, &in, sizeof(INPUT)) == 1;
+}
+
+bool MouseThread::warpCursor(int dx, int dy)
+{
+    POINT current{};
+    if (!GetCursorPos(&current))
+    {
+        return false;
+    }
+
+    int targetX = current.x + dx;
+    int targetY = current.y + dy;
+    return SetCursorPos(targetX, targetY) != FALSE;
 }
 
 void MouseThread::moveWorkerLoop()
@@ -398,6 +415,7 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
 
     std::lock_guard<std::mutex> lock(input_method_mutex);
     bool success = false;
+    bool attemptedWarp = false;
 
     switch (movement_backend)
     {
@@ -411,14 +429,27 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
         mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
         success = true;
         break;
+    case MovementBackend::CursorWarp:
+        success = warpCursor(dx, dy);
+        attemptedWarp = true;
+        break;
     default:
         success = sendInputMovement(dx, dy, false);
         break;
     }
 
-    if (!success && movement_backend != MovementBackend::MouseEvent)
+    if (!success)
     {
-        mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
+        // Some windows block injected mouse input; forcibly moving the cursor often still lands.
+        if (!attemptedWarp)
+        {
+            success = warpCursor(dx, dy);
+        }
+
+        if (!success && movement_backend != MovementBackend::MouseEvent)
+        {
+            mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
+        }
     }
 }
 
