@@ -11,6 +11,7 @@
 #include <vector>
 #include <cctype>
 #include <string>
+#include <climits>
 
 #include "mouse.h"
 #include "capture.h"
@@ -188,6 +189,10 @@ void MouseThread::setMovementMethod(const std::string& methodName)
     {
         movement_backend = MovementBackend::CursorWarp;
     }
+    else if (lower == "window_message" || lower == "post_message" || lower == "postmessage")
+    {
+        movement_backend = MovementBackend::WindowMessage;
+    }
     else
     {
         movement_backend = MovementBackend::SendInput;
@@ -220,6 +225,36 @@ bool MouseThread::warpCursor(int dx, int dy)
     int targetX = current.x + dx;
     int targetY = current.y + dy;
     return SetCursorPos(targetX, targetY) != FALSE;
+}
+
+bool MouseThread::postMessageMovement(int dx, int dy)
+{
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd)
+    {
+        return false;
+    }
+
+    POINT screenPt{ dx, dy };
+    if (!GetCursorPos(&screenPt))
+    {
+        return false;
+    }
+
+    screenPt.x += dx;
+    screenPt.y += dy;
+
+    POINT clientPt = screenPt;
+    if (!ScreenToClient(hwnd, &clientPt))
+    {
+        return false;
+    }
+
+    short cx = static_cast<short>(std::clamp(clientPt.x, static_cast<LONG>(SHRT_MIN), static_cast<LONG>(SHRT_MAX)));
+    short cy = static_cast<short>(std::clamp(clientPt.y, static_cast<LONG>(SHRT_MIN), static_cast<LONG>(SHRT_MAX)));
+    LPARAM lparam = MAKELPARAM(cx, cy);
+
+    return PostMessage(hwnd, WM_MOUSEMOVE, 0, lparam) != FALSE;
 }
 
 void MouseThread::moveWorkerLoop()
@@ -432,6 +467,9 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     case MovementBackend::CursorWarp:
         success = warpCursor(dx, dy);
         attemptedWarp = true;
+        break;
+    case MovementBackend::WindowMessage:
+        success = postMessageMovement(dx, dy);
         break;
     default:
         success = sendInputMovement(dx, dy, false);

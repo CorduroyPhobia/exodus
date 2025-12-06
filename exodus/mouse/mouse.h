@@ -67,7 +67,8 @@ private:
         SendInput,
         SendInputNoCoalesce,
         MouseEvent,
-        CursorWarp
+        CursorWarp,
+        WindowMessage
     };
 
     MovementBackend movement_backend = MovementBackend::SendInput;
@@ -101,6 +102,7 @@ private:
     void queueMove(int dx, int dy);
     bool sendInputMovement(int dx, int dy, bool noCoalesce);
     bool warpCursor(int dx, int dy);
+    bool postMessageMovement(int dx, int dy);
 
     bool   wind_mouse_enabled = true;
     double wind_G, wind_W, wind_M, wind_D;
