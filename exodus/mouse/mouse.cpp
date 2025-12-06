@@ -469,7 +469,26 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
         attemptedWarp = true;
         break;
     case MovementBackend::WindowMessage:
-        success = postMessageMovement(dx, dy);
+        {
+            POINT before{};
+            bool haveBefore = GetCursorPos(&before) != FALSE;
+
+            success = postMessageMovement(dx, dy);
+
+            // Some fullscreen apps swallow posted mouse messages without moving
+            // the actual cursor. If the cursor hasn't budged, fall back to a
+            // forced reposition so movement still occurs.
+            if (success && haveBefore)
+            {
+                Sleep(1);
+                POINT after{};
+                if (GetCursorPos(&after) && after.x == before.x && after.y == before.y)
+                {
+                    success = warpCursor(dx, dy);
+                    attemptedWarp = true;
+                }
+            }
+        }
         break;
     default:
         success = sendInputMovement(dx, dy, false);
