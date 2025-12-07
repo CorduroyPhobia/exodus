@@ -532,14 +532,17 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     std::lock_guard<std::mutex> lock(input_method_mutex);
     bool success = false;
     bool attemptedWarp = false;
+    bool attemptedSendInput = false;
 
     switch (movement_backend)
     {
     case MovementBackend::SendInput:
         success = sendInputMovement(dx, dy, false);
+        attemptedSendInput = true;
         break;
     case MovementBackend::SendInputNoCoalesce:
         success = sendInputMovement(dx, dy, true);
+        attemptedSendInput = true;
         break;
     case MovementBackend::MouseEvent:
         mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
@@ -612,15 +615,23 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
 
     if (!success)
     {
-        // Some windows block injected mouse input; forcibly moving the cursor often still lands.
-        if (!attemptedWarp)
+        // Some windows block injected mouse input; fall back through alternate
+        // injection paths before resorting to forcibly moving the cursor.
+        if (!attemptedSendInput)
         {
-            success = warpCursor(dx, dy);
+            success = sendInputMovement(dx, dy, false);
+            attemptedSendInput = true;
         }
 
         if (!success && movement_backend != MovementBackend::MouseEvent)
         {
             mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
+            success = true;
+        }
+
+        if (!attemptedWarp)
+        {
+            success = warpCursor(dx, dy);
         }
     }
 }
