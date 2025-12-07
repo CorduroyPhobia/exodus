@@ -572,7 +572,28 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
         }
         break;
     case MovementBackend::VMouse:
-        success = injectVMouse(dx, dy);
+        {
+            POINT before{};
+            RECT clip{};
+            bool haveBefore = GetCursorPos(&before) != FALSE;
+            bool clipLocked = GetClipCursor(&clip) != FALSE &&
+                clip.left == clip.right && clip.top == clip.bottom;
+
+            success = injectVMouse(dx, dy);
+
+            // Some fullscreen games report success but swallow the injected delta.
+            // If the cursor was free to move and did not budge, fall back to other
+            // injection paths.
+            if (success && haveBefore && !clipLocked)
+            {
+                Sleep(1);
+                POINT after{};
+                if (GetCursorPos(&after) && after.x == before.x && after.y == before.y)
+                {
+                    success = false;
+                }
+            }
+        }
         break;
     default:
         success = sendInputMovement(dx, dy, false);
