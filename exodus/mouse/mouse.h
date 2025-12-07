@@ -68,10 +68,13 @@ private:
         SendInputNoCoalesce,
         MouseEvent,
         CursorWarp,
-        WindowMessage
+        WindowMessage,
+        VMouse
     };
 
     MovementBackend movement_backend = MovementBackend::SendInput;
+
+    bool injectVMouse(int dx, int dy);
 
     std::vector<std::pair<double, double>> futurePositions;
     std::mutex                    futurePositionsMutex;

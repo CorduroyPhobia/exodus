@@ -6,16 +6,72 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
-#include <mutex>
 #include <atomic>
 #include <vector>
 #include <cctype>
 #include <string>
 #include <climits>
+#include <mutex>
 
 #include "mouse.h"
 #include "capture.h"
 #include "exodus.h"
+
+typedef LONG NTSTATUS;
+
+#ifndef NT_SUCCESS
+#define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
+
+typedef struct _MOUSE_INPUT_DATA
+{
+    USHORT UnitId;
+    USHORT Flags;
+    union
+    {
+        ULONG Buttons;
+        struct
+        {
+            USHORT ButtonFlags;
+            USHORT ButtonData;
+        };
+    };
+    ULONG RawButtons;
+    LONG  LastX;
+    LONG  LastY;
+    ULONG ExtraInformation;
+} MOUSE_INPUT_DATA, *PMOUSE_INPUT_DATA;
+
+// Flags for MOUSE_INPUT_DATA::Flags
+#ifndef MOUSE_MOVE_ABSOLUTE
+#define MOUSE_MOVE_ABSOLUTE         0x0001
+#endif
+#ifndef MOUSE_VIRTUAL_DESKTOP
+#define MOUSE_VIRTUAL_DESKTOP       0x0002
+#endif
+#ifndef MOUSE_ATTRIBUTES_CHANGED
+#define MOUSE_ATTRIBUTES_CHANGED    0x0004
+#endif
+#ifndef MOUSE_MOVE_NOCOALESCE
+#define MOUSE_MOVE_NOCOALESCE       0x0008
+#endif
+
+using NtUserInjectMouseInput_t = NTSTATUS(WINAPI*)(PMOUSE_INPUT_DATA, ULONG);
+
+static std::once_flag g_vmouseLoadFlag;
+static NtUserInjectMouseInput_t g_injectMouse = nullptr;
+
+static void LoadVMouseInjector()
+{
+    HMODULE win32u = LoadLibraryW(L"win32u.dll");
+    if (!win32u)
+    {
+        return;
+    }
+
+    g_injectMouse = reinterpret_cast<NtUserInjectMouseInput_t>(
+        GetProcAddress(win32u, "NtUserInjectMouseInput"));
+}
 
 MouseThread::MouseThread(
     int resolution,
@@ -193,10 +249,35 @@ void MouseThread::setMovementMethod(const std::string& methodName)
     {
         movement_backend = MovementBackend::WindowMessage;
     }
+    else if (lower == "vmouse" || lower == "ntinject" || lower == "nt_user_inject")
+    {
+        movement_backend = MovementBackend::VMouse;
+    }
     else
     {
         movement_backend = MovementBackend::SendInput;
     }
+}
+
+bool MouseThread::injectVMouse(int dx, int dy)
+{
+    std::call_once(g_vmouseLoadFlag, LoadVMouseInjector);
+    if (!g_injectMouse)
+    {
+        return false;
+    }
+
+    MOUSE_INPUT_DATA data{};
+    data.UnitId = 0;
+    data.Flags = 0; // relative move
+    data.Buttons = 0;
+    data.RawButtons = 0;
+    data.LastX = dx;
+    data.LastY = dy;
+    data.ExtraInformation = 0;
+
+    NTSTATUS status = g_injectMouse(&data, 1);
+    return NT_SUCCESS(status);
 }
 
 bool MouseThread::sendInputMovement(int dx, int dy, bool noCoalesce)
@@ -489,6 +570,9 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
                 }
             }
         }
+        break;
+    case MovementBackend::VMouse:
+        success = injectVMouse(dx, dy);
         break;
     default:
         success = sendInputMovement(dx, dy, false);
