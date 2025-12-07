@@ -574,23 +574,33 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     case MovementBackend::VMouse:
         {
             POINT before{};
-            RECT clip{};
             bool haveBefore = GetCursorPos(&before) != FALSE;
-            bool clipLocked = GetClipCursor(&clip) != FALSE &&
-                clip.left == clip.right && clip.top == clip.bottom;
 
             success = injectVMouse(dx, dy);
 
             // Some fullscreen games report success but swallow the injected delta.
             // If the cursor was free to move and did not budge, fall back to other
             // injection paths.
-            if (success && haveBefore && !clipLocked)
+            if (success && haveBefore)
             {
                 Sleep(1);
                 POINT after{};
                 if (GetCursorPos(&after) && after.x == before.x && after.y == before.y)
                 {
-                    success = false;
+                    ++vmouse_stall_count;
+                    // If the cursor is locked and we repeatedly see no movement,
+                    // the injected deltas are likely getting swallowed. Trigger
+                    // the fallback path after a few consecutive stalls so games
+                    // stuck in raw-input mode still receive movement.
+                    if (vmouse_stall_count >= 3)
+                    {
+                        success = false;
+                        vmouse_stall_count = 0;
+                    }
+                }
+                else
+                {
+                    vmouse_stall_count = 0;
                 }
             }
         }

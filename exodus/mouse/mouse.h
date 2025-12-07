@@ -74,6 +74,8 @@ private:
 
     MovementBackend movement_backend = MovementBackend::SendInput;
 
+    int vmouse_stall_count = 0;
+
     bool injectVMouse(int dx, int dy);
 
     std::vector<std::pair<double, double>> futurePositions;
