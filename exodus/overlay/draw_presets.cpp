@@ -201,6 +201,7 @@ static void applyPresetSideEffects(const Config& previous)
         previous.nearRadius != config.nearRadius ||
         previous.speedCurveExponent != config.speedCurveExponent ||
         previous.snapBoostFactor != config.snapBoostFactor ||
+        previous.mouse_move_method != config.mouse_move_method ||
         previous.auto_shoot != config.auto_shoot ||
         previous.auto_shoot_hold_until_off_target != config.auto_shoot_hold_until_off_target ||
         previous.bScope_multiplier != config.bScope_multiplier ||
@@ -230,7 +231,8 @@ static void applyPresetSideEffects(const Config& previous)
             config.bScope_multiplier,
             config.auto_shoot_fire_delay_ms,
             config.auto_shoot_press_duration_ms,
-            config.auto_shoot_full_auto_grace_ms);
+            config.auto_shoot_full_auto_grace_ms,
+            config.mouse_move_method);
     }
 
     if (previous.detection_resolution != config.detection_resolution)

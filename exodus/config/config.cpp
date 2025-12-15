@@ -101,6 +101,7 @@ static void writeConfigToStream(std::ostream& file, const Config& cfg, const std
         << "nearRadius = " << cfg.nearRadius << "\n"
         << "speedCurveExponent = " << cfg.speedCurveExponent << "\n"
         << "snapBoostFactor = " << cfg.snapBoostFactor << "\n"
+        << "mouse_move_method = " << cfg.mouse_move_method << "\n"
 
         << "easynorecoil = " << (cfg.easynorecoil ? "true" : "false") << "\n"
         << std::fixed << std::setprecision(1)
@@ -250,6 +251,8 @@ bool Config::loadConfig(const std::string& filename)
         nearRadius = 13.89f;
         speedCurveExponent = 1.81f;
         snapBoostFactor = 1.14f;
+
+        mouse_move_method = "send_input";
 
         target_switching_enabled = false;
         target_switch_reaction_ms = 55.0f;
@@ -546,6 +549,8 @@ bool Config::loadConfig(const std::string& filename)
     nearRadius = (float)get_double("nearRadius", 13.89);
     speedCurveExponent = (float)get_double("speedCurveExponent", 1.81);
     snapBoostFactor = (float)get_double("snapBoostFactor", 1.14);
+
+    mouse_move_method = get_string("mouse_move_method", "send_input");
 
     target_switching_enabled = get_bool("target_switching_enabled", false);
     target_switch_reaction_ms = (float)get_double("target_switch_reaction_ms", 55.0);
